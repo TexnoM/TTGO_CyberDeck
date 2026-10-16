@@ -632,13 +632,34 @@ void UIManager::renderCyberCat() {
     c.print("  > ^ <  ");
 
     c.setTextColor(pal.secondary);
-    c.setCursor(boxX + 64, boxY + 12);
-    c.print("MEOW! //");
+    c.setCursor(boxX + 64, boxY + 10);
+    c.print("ASTRO CAT");
     c.setTextColor(pal.ok);
-    c.setCursor(boxX + 64, boxY + 26);
-    c.print("CAT PURR");
+    c.setCursor(boxX + 64, boxY + 24);
+    c.print("PURR // =^.^=");
 
     Display.markDirty(boxX, boxY, boxW, boxH);
+}
+
+struct SsSpaceStar {
+    float x;
+    float y;
+    float z;
+    float pz;
+};
+
+static constexpr size_t kSsStarCount = 48;
+static SsSpaceStar s_ssStars[kSsStarCount];
+static bool s_ssStarsInit = false;
+
+static void initSsStars() {
+    for (size_t i = 0; i < kSsStarCount; ++i) {
+        s_ssStars[i].x = ((int)(esp_random() % 240) - 120);
+        s_ssStars[i].y = ((int)(esp_random() % 360) - 180);
+        s_ssStars[i].z = (float)(20 + (esp_random() % 220));
+        s_ssStars[i].pz = s_ssStars[i].z;
+    }
+    s_ssStarsInit = true;
 }
 
 void UIManager::renderScreensaver() {
@@ -646,43 +667,92 @@ void UIManager::renderScreensaver() {
     const ColorPalette& pal = Settings.palette();
     c.fillSprite(pal.bg);
 
-    uint32_t now = millis();
-    float t = now * 0.001f;
+    if (!s_ssStarsInit) {
+        initSsStars();
+    }
 
-    // Organic floating displacement (lissajous bounce)
-    int16_t cx = (DisplayManager::kWidth / 2) + (int16_t)(std::sin(t * 0.45f) * 14.0f);
-    int16_t cy = 90 + (int16_t)(std::cos(t * 0.35f) * 40.0f);
+    uint32_t now = millis();
+    float dt = Anim.dt();
+    if (dt <= 0.001f || dt > 0.1f) dt = 0.016f;
+
+    int16_t vcx = DisplayManager::kWidth / 2;
+    int16_t vcy = DisplayManager::kHeight / 2;
+
+    // 1. Draw 3D Space Hyperdrive Starfield in the background
+    float starSpeed = 85.0f; // Fast cosmic warp travel
+    for (size_t i = 0; i < kSsStarCount; ++i) {
+        s_ssStars[i].pz = s_ssStars[i].z;
+        s_ssStars[i].z -= starSpeed * dt;
+
+        if (s_ssStars[i].z <= 4.0f) {
+            s_ssStars[i].x = ((int)(esp_random() % 240) - 120);
+            s_ssStars[i].y = ((int)(esp_random() % 360) - 180);
+            s_ssStars[i].z = 220.0f;
+            s_ssStars[i].pz = 220.0f;
+        }
+
+        float k = 100.0f / s_ssStars[i].z;
+        int16_t sx = vcx + (int16_t)(s_ssStars[i].x * k);
+        int16_t sy = vcy + (int16_t)(s_ssStars[i].y * k);
+
+        float pk = 100.0f / s_ssStars[i].pz;
+        int16_t psx = vcx + (int16_t)(s_ssStars[i].x * pk);
+        int16_t psy = vcy + (int16_t)(s_ssStars[i].y * pk);
+
+        if (sx < 0 || sx >= DisplayManager::kWidth || sy < 0 || sy >= DisplayManager::kHeight) {
+            s_ssStars[i].z = 220.0f;
+            continue;
+        }
+
+        // Color based on depth: nearby stars are glowing white/highlight, mid-distance are cyan, far are dim
+        uint16_t starCol = (s_ssStars[i].z < 60.0f) ? pal.highlight : ((s_ssStars[i].z < 130.0f) ? pal.secondary : pal.gridDim);
+        c.drawLine(psx, psy, sx, sy, starCol);
+        if (s_ssStars[i].z < 50.0f) {
+            c.drawPixel(sx + 1, sy, starCol);
+        }
+    }
+
+    // 2. Central Cyber Time Capsule (Stable, crystal-clear, beautifully framed)
+    int16_t pw = DisplayManager::kWidth - 14;
+    int16_t ph = 96;
+    int16_t px = 7;
+    int16_t py = 72;
+
+    // Semi-solid dark futuristic glass cockpit panel with glowing neon borders
+    Display.drawCyberPanel(px, py, pw, ph, pal.panelBg, pal.secondary, pal.primary, 4);
 
     char hms[16], dateStr[24];
     Net.getFormattedTime(hms, sizeof(hms), dateStr, sizeof(dateStr));
 
-    // Floating subtle background matrix sparkles
-    for (int i = 0; i < 8; ++i) {
-        int16_t sx = (int16_t)((i * 22 + (uint32_t)(now * 0.02f * (i + 1))) % DisplayManager::kWidth);
-        int16_t sy = (int16_t)((i * 35 + (uint32_t)(now * 0.035f * (i + 1))) % DisplayManager::kHeight);
-        c.drawPixel(sx, sy, pal.gridDim);
-    }
-
-    // Large floating digital cyber clock
+    // Big digital time right in the center
     c.setTextSize(2);
     int16_t tw = std::strlen(hms) * 12;
-    int16_t tx = max<int16_t>(4, cx - tw / 2);
-    c.setTextColor(pal.primary);
-    c.setCursor(tx, cy);
+    int16_t tx = px + (pw - tw) / 2;
+    c.setTextColor(pal.highlight);
+    c.setCursor(tx, py + 18);
     c.print(hms);
     c.setTextSize(1);
 
-    // Date & Idle Badge below floating clock
-    c.setTextColor(pal.textDim);
+    // Dynamic seconds progress bar under the digits
+    uint32_t ep = Net.currentEpoch();
+    uint32_t sec = ep % 60;
+    Display.drawProgressBar(px + 12, py + 46, pw - 24, 2, sec / 59.0f, pal.primary, pal.gridDim, pal.bg);
+
+    // Formatted date & space badge
+    c.setTextColor(pal.textMain);
     int16_t dw = std::strlen(dateStr) * 6;
-    c.setCursor(max<int16_t>(4, cx - dw / 2), cy + 22);
+    c.setCursor(px + (pw - dw) / 2, py + 58);
     c.print(dateStr);
 
     c.setTextColor(pal.secondary);
-    c.setCursor((DisplayManager::kWidth - 80) / 2, cy + 38);
-    c.print("[ECO DIM -30%]");
+    c.setCursor(px + (pw - 84) / 2, py + 74);
+    c.print("SPACE WARP -30%");
 
-    // Bottom subtle hint
+    // Header & footer subtle status
+    c.setTextColor(pal.textDim);
+    c.setCursor(10, 14);
+    c.print("DEEP SPACE CHRONO");
+
     c.setTextColor(pal.gridDim);
     c.setCursor(14, DisplayManager::kHeight - 16);
     c.print("PRESS KEY TO WAKE");
