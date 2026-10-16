@@ -12,18 +12,19 @@
   - Native `swap565_t` SPI DMA transfers (`40 MHz`) with `25 kHz` high-frequency PWM backlight.
   - Non-strobing soft background scanlines & scanner beam that tint only background pixels while keeping bright text 100% solid.
   - **5 Rotating Cyberpunk Glitch Patterns**: `RGB Chromatic Split`, `Sine Wave Ripple`, `Dual Laser Sync Beam`, `Holographic Data Burst`, and `Classic Soft CRT` (configurable in `SETTINGS -> GLITCH FX`: `MULTI`, `CLASSIC`, `OFF`).
-- **11 Built-in Cyberdeck Applications**:
+- **12 Built-in Cyberdeck Applications**:
   1. **`SYSTEM` (`MOD-01 // SYS`)** — Dual-Core CPU telemetry, SRAM/Heap fragmentation monitor, MAC ID, uptime, live FPS & 40-frame timing oscilloscope.
   2. **`WIFI RADAR` (`MOD-02 // RAD`)** — Non-blocking 2.4 GHz spectrum scanner with RSSI sorting, security inspector (`OPEN/WPA2/WPA3`), and scrollbar navigation.
   3. **`PKT SNIFFER` (`MOD-03 // SNF`)** — Passive 802.11 promiscuous packet monitor (`PKT/s`, `MGMT`, `DATA`), live air-traffic waveform, and **13-channel congestion histogram** with manual channel lock or auto-hopping.
   4. **`NET TOOLS` (`MOD-04 // NET`)** — Local IP/GW/DNS readout + non-blocking Core 0 ICMP/TCP Ping Sonar with 24-sample RTT bar chart and continuous auto-ping mode.
-  5. **`WEB DECK` (`MOD-05 // WEB`)** — Built-in HTTP Remote Cyber Console accessible over LAN or Hotspot AP (`http://192.168.4.1`, SSID `TTGO-CyberDeck-XXXX`) to switch apps/themes, view telemetry, send Pager Alerts to the screen, and configure Wi-Fi.
-  6. **`CRYPTO LAB` (`MOD-06 // CRY`)** — Hardware RF RNG password/key generator (`Pass-16`, `64-bit HEX`, `PIN/Token`) + real-time `mbedTLS` **SHA-256** digest calculator & MCU hash/sec benchmark.
-  7. **`TERMINAL` (`MOD-07 // SHL`)** — Two-button local command shell (`help`, `sysinfo`, `wifi`, `scan`, `ping`, `keygen`, `uptime`, `theme`, `reboot`).
-  8. **`MATRIX` (`MOD-08 // MTX`)** — Customizable digital rain stream (`Speed 1..5`, `Density 1..5`).
-  9. **`STARFIELD` (`MOD-09 // STR`)** — 3D perspective warp simulator with HUD reticle and Hyperwarp streak mode.
-  10. **`CLOCK` (`MOD-10 // CLK`)** — NTP-synchronized digital chronometer with timezone selector and sync status indicator.
-  11. **`SETTINGS` (`MOD-11 // CFG`)** — NVS persistent configuration (4 neon themes, brightness, glitch mode selector, UI speed, FPS cap, Wi-Fi AP, hardware pinout viewer, factory reset).
+  5. **`WEB DECK` (`MOD-05 // WEB`)** — Built-in HTTP Remote Cyber Console accessible over LAN or Hotspot AP (`http://192.168.4.1`, SSID `TTGO-CyberDeck-XXXX`) to switch apps/themes, view telemetry, send Pager Alerts, set custom time, and configure Wi-Fi.
+  6. **`CYBER EYE` (`MOD-06 // EYE`)** — Interactive cyber-pet keychain demo: animated cybernetic eye looking around, blinking, and switching emotion modes (`NORMAL`, `AGGRESSIVE`, `SCANNING`, `SLEEP`) via button `B`.
+  7. **`3D CUBE` (`MOD-07 // CUB`)** — Real-time 3D wireframe rotating cube and 4D tesseract hypercube projection demo for keychain visuals.
+  8. **`TERMINAL` (`MOD-08 // SHL`)** — Two-button local command shell (`help`, `sysinfo`, `wifi`, `scan`, `ping`, `uptime`, `theme`, `reboot`).
+  9. **`MATRIX` (`MOD-09 // MTX`)** — Customizable digital rain stream (`Speed 1..5`, `Density 1..5`).
+  10. **`STARFIELD` (`MOD-10 // STR`)** — 3D perspective warp simulator with HUD reticle and Hyperwarp streak mode.
+  11. **`CLOCK` (`MOD-11 // CLK`)** — Versatile digital clock: supports manual time setting via buttons on the board (hold `B` to enter editor), NTP Wi-Fi sync, or 1-click sync from your smartphone browser via web console.
+  12. **`SETTINGS` (`MOD-12 // CFG`)** — NVS persistent configuration (4 neon themes, brightness, glitch mode selector, UI speed, FPS cap, Wi-Fi AP, hardware pinout viewer, factory reset).
 
 ---
 

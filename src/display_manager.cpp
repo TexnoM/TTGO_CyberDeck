@@ -331,13 +331,25 @@ void DisplayManager::drawAppIcon(uint8_t appIndex, int16_t cx, int16_t cy,
             _canvas.drawFastHLine(cx - 8, cy + 5, 17, primaryCol);
             break;
         }
-        case 5: { // CRYPTO LAB — Cyber shield / key lock
-            _canvas.drawRect(cx - 7, cy - 2, 15, 11, primaryCol);
-            _canvas.drawCircle(cx, cy - 4, 5, secondaryCol);
-            _canvas.fillRect(cx - 1, cy + 1, 3, 5, secondaryCol);
+        case 5: { // CYBER EYE — Cybernetic Eye / Virtual Pet
+            _canvas.drawCircle(cx, cy, 10, primaryCol);
+            _canvas.drawCircle(cx, cy, 4, secondaryCol);
+            _canvas.fillCircle(cx, cy, 2, primaryCol);
+            _canvas.drawFastHLine(cx - 12, cy, 3, secondaryCol);
+            _canvas.drawFastHLine(cx + 10, cy, 3, secondaryCol);
             break;
         }
-        case 6: { // TERMINAL — [ >_ ] prompt
+        case 6: { // 3D CUBE — Wireframe Isometric Cube
+            int16_t s = 6;
+            _canvas.drawRect(cx - s, cy - s, s * 2, s * 2, primaryCol);
+            _canvas.drawLine(cx - s, cy - s, cx - s - 3, cy - s - 3, secondaryCol);
+            _canvas.drawLine(cx + s, cy - s, cx + s - 3, cy - s - 3, secondaryCol);
+            _canvas.drawLine(cx + s, cy + s, cx + s - 3, cy + s - 3, secondaryCol);
+            _canvas.drawLine(cx - s, cy + s, cx - s - 3, cy + s - 3, secondaryCol);
+            _canvas.drawRect(cx - s - 3, cy - s - 3, s * 2, s * 2, secondaryCol);
+            break;
+        }
+        case 7: { // TERMINAL — [ >_ ] prompt
             _canvas.drawRect(cx - 11, cy - 9, 22, 18, secondaryCol);
             _canvas.drawFastHLine(cx - 11, cy - 5, 22, secondaryCol);
             _canvas.drawLine(cx - 7, cy - 1, cx - 3, cy + 2, primaryCol);
@@ -347,7 +359,7 @@ void DisplayManager::drawAppIcon(uint8_t appIndex, int16_t cx, int16_t cy,
             }
             break;
         }
-        case 7: { // MATRIX — Cascading digital rain
+        case 8: { // MATRIX — Cascading digital rain
             for (int i = -8; i <= 8; i += 4) {
                 int16_t drop = ((animMs / 110) + (i + 8) * 2) % 12;
                 _canvas.drawFastVLine(cx + i, cy - 8, 16, secondaryCol);
@@ -355,7 +367,7 @@ void DisplayManager::drawAppIcon(uint8_t appIndex, int16_t cx, int16_t cy,
             }
             break;
         }
-        case 8: { // STARFIELD — 4-point star
+        case 9: { // STARFIELD — 4-point star
             _canvas.drawLine(cx - 10, cy, cx + 10, cy, primaryCol);
             _canvas.drawLine(cx, cy - 10, cx, cy + 10, primaryCol);
             _canvas.drawLine(cx - 5, cy - 5, cx + 5, cy + 5, secondaryCol);
@@ -363,7 +375,7 @@ void DisplayManager::drawAppIcon(uint8_t appIndex, int16_t cx, int16_t cy,
             _canvas.fillCircle(cx, cy, 2, primaryCol);
             break;
         }
-        case 9: { // CLOCK — Chronometer
+        case 10: { // CLOCK — Chronometer
             _canvas.drawCircle(cx, cy, 10, primaryCol);
             _canvas.drawCircle(cx, cy, 8, secondaryCol);
             _canvas.drawFastVLine(cx, cy - 6, 6, primaryCol);

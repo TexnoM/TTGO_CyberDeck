@@ -13,12 +13,13 @@ static const AppMetadata kAppMeta[APP_COUNT] = {
     { APP_PKT_SNIFFER, "PKT SNIFFER", "802.11 TRAFFIC & CH",   "MOD-03 // SNF" },
     { APP_NET_TOOLS,   "NET TOOLS",   "IP SONAR & HOST PING",  "MOD-04 // NET" },
     { APP_WEB_DECK,    "WEB DECK",    "REMOTE HTTP CONSOLE",   "MOD-05 // WEB" },
-    { APP_CRYPTO_LAB,  "CRYPTO LAB",  "HW RNG & SHA256 CORE",  "MOD-06 // CRY" },
-    { APP_TERMINAL,    "TERMINAL",    "LOCAL DECK SHELL",      "MOD-07 // SHL" },
-    { APP_MATRIX,      "MATRIX",      "DIGITAL RAIN STREAM",   "MOD-08 // MTX" },
-    { APP_STARFIELD,   "STARFIELD",   "3D WARP VECTOR SIM",    "MOD-09 // STR" },
-    { APP_CLOCK,       "CLOCK",       "NTP CYBER CHRONO",      "MOD-10 // CLK" },
-    { APP_SETTINGS,    "SETTINGS",    "NVS CONFIG & TUNING",   "MOD-11 // CFG" }
+    { APP_CYBER_EYE,   "CYBER EYE",   "VIRTUAL PET KEYCHAIN",  "MOD-06 // EYE" },
+    { APP_CUBE_3D,     "3D CUBE",     "WIREFRAME TESSERACT",   "MOD-07 // 3DC" },
+    { APP_TERMINAL,    "TERMINAL",    "LOCAL DECK SHELL",      "MOD-08 // SHL" },
+    { APP_MATRIX,      "MATRIX",      "DIGITAL RAIN STREAM",   "MOD-09 // MTX" },
+    { APP_STARFIELD,   "STARFIELD",   "3D WARP VECTOR SIM",    "MOD-10 // STR" },
+    { APP_CLOCK,       "CLOCK",       "CUSTOM & WIFI TIME",    "MOD-11 // CLK" },
+    { APP_SETTINGS,    "SETTINGS",    "NVS CONFIG & TUNING",   "MOD-12 // CFG" }
 };
 
 const AppMetadata& getAppMeta(uint8_t idx) {
@@ -452,84 +453,252 @@ public:
 };
 
 // ============================================================================
-// 6. CRYPTO LAB — HARDWARE RNG & SHA-256 ENGINE (MINIMALIST)
+// 6. CYBER EYE — VIRTUAL CYBER PET KEYCHAIN (GRAPHICAL DEMO)
 // ============================================================================
-class AppCryptoLab : public CyberApp {
-    uint8_t  _mode = 0;
-    char     _secret[22] = {0};
-    char     _shaHex1[22] = {0};
-    bool     _dirty = true;
-
-    void generateEntropy() {
-        static const char kAlpha[] = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*";
-        if (_mode == 0) {
-            for (int i = 0; i < 16; ++i) {
-                _secret[i] = kAlpha[esp_random() % (sizeof(kAlpha) - 1)];
-            }
-            _secret[16] = '\0';
-        } else if (_mode == 1) {
-            snprintf(_secret, sizeof(_secret), "%08lX-%08lX",
-                     (unsigned long)esp_random(), (unsigned long)esp_random());
-        } else {
-            snprintf(_secret, sizeof(_secret), "%06lu-%06lu",
-                     (unsigned long)(esp_random() % 1000000UL), (unsigned long)(esp_random() % 1000000UL));
-        }
-
-        uint8_t digest[32];
-        mbedtls_sha256_context ctx;
-        mbedtls_sha256_init(&ctx);
-        mbedtls_sha256_starts(&ctx, 0);
-        mbedtls_sha256_update(&ctx, reinterpret_cast<const uint8_t*>(_secret), std::strlen(_secret));
-        mbedtls_sha256_finish(&ctx, digest);
-        mbedtls_sha256_free(&ctx);
-
-        for (int i = 0; i < 8; ++i) {
-            snprintf(_shaHex1 + i * 2, 3, "%02X", digest[i]);
-        }
-        _dirty = true;
-    }
+class AppCyberEye : public CyberApp {
+    uint8_t  _mood = 0; // 0=CYBER, 1=SQUINT, 2=HAPPY, 3=TARGET
+    uint32_t _nextBlinkMs = 0;
+    uint32_t _blinkStartMs = 0;
+    bool     _blinking = false;
+    float    _lookX = 0.0f;
+    float    _lookY = 0.0f;
+    float    _targetLookX = 0.0f;
+    float    _targetLookY = 0.0f;
+    uint32_t _nextLookChangeMs = 0;
 
 public:
     void onEnter() override {
-        generateEntropy();
+        _nextBlinkMs = millis() + 2000;
+        _nextLookChangeMs = millis() + 1000;
     }
 
-    const char* hintA() const override { return "MODE"; }
-    const char* hintB() const override { return "NEW KEY"; }
+    const char* hintA() const override { return "MOOD"; }
+    const char* hintB() const override { return "BLINK"; }
 
     void handleInput(ButtonEvent ev) override {
         if (ev == ButtonEvent::A_SHORT) {
-            _mode = (_mode + 1) % 3;
-            generateEntropy();
+            _mood = (_mood + 1) % 4;
+            Buttons.playClickTone(1800, 20);
         } else if (ev == ButtonEvent::B_SHORT) {
-            generateEntropy();
+            _blinking = true;
+            _blinkStartMs = millis();
+            Buttons.playClickTone(2400, 30);
         }
     }
 
     void updateAndRender(int16_t yOffset) override {
-        if (yOffset == 0 && !_dirty) return;
-        _dirty = false;
-
+        uint32_t now = millis();
         auto& c = Display.canvas();
         const ColorPalette& pal = Settings.palette();
         Display.clearBody(pal.bg);
         int16_t by = DisplayManager::kBodyY + yOffset;
 
-        c.setTextColor(pal.textDim);
-        c.setCursor(10, by + 32);
-        c.print((_mode == 0) ? "PASSPHRASE" : (_mode == 1) ? "HEX KEY" : "PIN TOKEN");
+        // Auto look direction change
+        if (now >= _nextLookChangeMs) {
+            _nextLookChangeMs = now + 1200 + (esp_random() % 2000);
+            _targetLookX = ((int)(esp_random() % 31) - 15) * 1.0f;
+            _targetLookY = ((int)(esp_random() % 21) - 10) * 1.0f;
+        }
+        _lookX += (_targetLookX - _lookX) * 0.15f;
+        _lookY += (_targetLookY - _lookY) * 0.15f;
 
-        Display.drawCyberPanel(8, by + 50, DisplayManager::kWidth - 16, 36, pal.panelBg, pal.primary, pal.secondary, 0);
-        c.setTextColor(pal.highlight);
-        c.setCursor(14, by + 64);
-        c.print(_secret);
+        // Auto blink logic
+        if (!_blinking && now >= _nextBlinkMs) {
+            _blinking = true;
+            _blinkStartMs = now;
+            _nextBlinkMs = now + 2500 + (esp_random() % 3500);
+        }
 
-        c.setTextColor(pal.textDim);
-        c.setCursor(10, by + 114);
-        c.print("SHA-256");
+        float blinkFactor = 1.0f; // 1.0 = fully open, 0.0 = fully closed
+        if (_blinking) {
+            uint32_t dt = now - _blinkStartMs;
+            if (dt < 90) {
+                blinkFactor = 1.0f - (dt / 90.0f);
+            } else if (dt < 180) {
+                blinkFactor = (dt - 90) / 90.0f;
+            } else {
+                _blinking = false;
+                blinkFactor = 1.0f;
+            }
+        }
+
+        int16_t cx = DisplayManager::kWidth / 2;
+        int16_t cy = by + 95;
+
+        // Title & Mood status
+        const char* moodNames[] = { "CYBER PET", "HUNTER SQUINT", "HAPPY ARC", "RED OVERCLOCK" };
         c.setTextColor(pal.secondary);
-        c.setCursor(10, by + 130);
-        c.print(_shaHex1);
+        int16_t tw = std::strlen(moodNames[_mood]) * 6;
+        c.setCursor((DisplayManager::kWidth - tw) / 2, by + 16);
+        c.print(moodNames[_mood]);
+
+        // Eye geometry
+        int16_t eyeW = 50;
+        int16_t eyeH = (int16_t)(32.0f * blinkFactor);
+
+        uint16_t eyeCol = (_mood == 3) ? pal.danger : pal.primary;
+        uint16_t irisCol = (_mood == 3) ? pal.warning : pal.highlight;
+
+        if (eyeH < 3) {
+            // Fully closed eye slit
+            c.drawFastHLine(cx - eyeW, cy, eyeW * 2, eyeCol);
+        } else {
+            if (_mood == 2) {
+                // Happy anime curve (^ _ ^)
+                for (int16_t dx = -eyeW; dx <= eyeW; dx += 2) {
+                    float norm = (float)dx / (float)eyeW;
+                    int16_t dy = (int16_t)((1.0f - norm * norm) * eyeH);
+                    c.drawPixel(cx + dx, cy - dy, eyeCol);
+                    c.drawPixel(cx + dx, cy - dy + 1, eyeCol);
+                }
+            } else {
+                // Cyber Outer Eye Sclera Outline
+                c.drawEllipse(cx, cy, eyeW, eyeH, eyeCol);
+                c.drawEllipse(cx, cy, eyeW - 1, eyeH - 1, AnimationEngine::lerpColor565(pal.bg, eyeCol, 120));
+
+                // Pupil / Iris with animated look position
+                int16_t px = cx + (int16_t)_lookX;
+                int16_t py = cy + (int16_t)(_lookY * blinkFactor);
+
+                int16_t irisR = (_mood == 1) ? 14 : 18;
+                c.drawCircle(px, py, (int16_t)(irisR * blinkFactor), eyeCol);
+                c.fillCircle(px, py, (int16_t)(8 * blinkFactor), irisCol);
+
+                // Cyber glint highlight
+                if (blinkFactor > 0.6f) {
+                    c.fillCircle(px - 3, py - 3, 2, pal.highlight);
+                }
+
+                // Decorative cyber corner brackets
+                c.drawFastHLine(cx - eyeW - 4, cy - eyeH - 2, 6, pal.secondary);
+                c.drawFastVLine(cx - eyeW - 4, cy - eyeH - 2, 6, pal.secondary);
+                c.drawFastHLine(cx + eyeW - 2, cy - eyeH - 2, 6, pal.secondary);
+                c.drawFastVLine(cx + eyeW + 4, cy - eyeH - 2, 6, pal.secondary);
+                c.drawFastHLine(cx - eyeW - 4, cy + eyeH + 2, 6, pal.secondary);
+                c.drawFastVLine(cx - eyeW - 4, cy + eyeH - 4, 6, pal.secondary);
+                c.drawFastHLine(cx + eyeW - 2, cy + eyeH + 2, 6, pal.secondary);
+                c.drawFastVLine(cx + eyeW + 4, cy + eyeH - 4, 6, pal.secondary);
+            }
+        }
+
+        // Bottom heartbeat / keychain pulse
+        int16_t barY = by + 170;
+        c.drawFastHLine(14, barY, DisplayManager::kWidth - 28, pal.gridDim);
+        int16_t pulseX = 14 + ((now / 20) % (DisplayManager::kWidth - 28));
+        c.fillRect(pulseX - 3, barY - 2, 6, 5, eyeCol);
+    }
+};
+
+// ============================================================================
+// 7. 3D WIRE CUBE / TESSERACT (REAL-TIME 3D GRAPHICAL DEMO)
+// ============================================================================
+class AppCube3D : public CyberApp {
+    float _angleX = 0.0f;
+    float _angleY = 0.0f;
+    float _angleZ = 0.0f;
+    uint8_t _mode = 0; // 0 = CUBE, 1 = TESSERACT
+    uint8_t _speed = 2;
+
+    struct Vec3 { float x, y, z; };
+    struct Point2D { int16_t x, y; };
+
+    Point2D project(Vec3 v, int16_t cx, int16_t cy, float scale, float distance) {
+        float radX = _angleX;
+        float y1 = v.y * std::cos(radX) - v.z * std::sin(radX);
+        float z1 = v.y * std::sin(radX) + v.z * std::cos(radX);
+
+        float radY = _angleY;
+        float x2 = v.x * std::cos(radY) + z1 * std::sin(radY);
+        float z2 = -v.x * std::sin(radY) + z1 * std::cos(radY);
+
+        float radZ = _angleZ;
+        float x3 = x2 * std::cos(radZ) - y1 * std::sin(radZ);
+        float y3 = x2 * std::sin(radZ) + y1 * std::cos(radZ);
+
+        float zPersp = z2 + distance;
+        float f = (zPersp > 0.1f) ? (scale / zPersp) : scale;
+        return Point2D{ (int16_t)(cx + x3 * f), (int16_t)(cy + y3 * f) };
+    }
+
+public:
+    const char* hintA() const override { return "SPEED"; }
+    const char* hintB() const override { return (_mode == 0) ? "4D TESS" : "3D CUBE"; }
+
+    void handleInput(ButtonEvent ev) override {
+        if (ev == ButtonEvent::A_SHORT) {
+            _speed = (_speed % 4) + 1;
+        } else if (ev == ButtonEvent::B_SHORT) {
+            _mode = (_mode + 1) % 2;
+        }
+    }
+
+    void updateAndRender(int16_t yOffset) override {
+        auto& c = Display.canvas();
+        const ColorPalette& pal = Settings.palette();
+        Display.clearBody(pal.bg);
+        int16_t by = DisplayManager::kBodyY + yOffset;
+
+        float dt = Anim.dt();
+        float spd = (0.6f + _speed * 0.7f);
+        _angleX += 0.8f * spd * dt;
+        _angleY += 1.2f * spd * dt;
+        _angleZ += 0.5f * spd * dt;
+
+        int16_t cx = DisplayManager::kWidth / 2;
+        int16_t cy = by + 98;
+
+        c.setTextColor(pal.secondary);
+        c.setCursor(10, by + 14);
+        c.print((_mode == 0) ? "3D WIRE CUBE" : "4D TESSERACT");
+
+        static const Vec3 kCubeVerts[8] = {
+            {-1, -1, -1}, { 1, -1, -1}, { 1,  1, -1}, {-1,  1, -1},
+            {-1, -1,  1}, { 1, -1,  1}, { 1,  1,  1}, {-1,  1,  1}
+        };
+
+        static const uint8_t kEdges[12][2] = {
+            {0, 1}, {1, 2}, {2, 3}, {3, 0},
+            {4, 5}, {5, 6}, {6, 7}, {7, 4},
+            {0, 4}, {1, 5}, {2, 6}, {3, 7}
+        };
+
+        Point2D pOuter[8];
+        for (int i = 0; i < 8; ++i) {
+            pOuter[i] = project(kCubeVerts[i], cx, cy, 140.0f, 3.8f);
+        }
+
+        // Draw Outer Cube
+        for (int i = 0; i < 12; ++i) {
+            c.drawLine(pOuter[kEdges[i][0]].x, pOuter[kEdges[i][0]].y,
+                       pOuter[kEdges[i][1]].x, pOuter[kEdges[i][1]].y, pal.primary);
+        }
+
+        if (_mode == 1) {
+            // Draw Inner Tesseract Cube & connection struts
+            Point2D pInner[8];
+            for (int i = 0; i < 8; ++i) {
+                Vec3 vInner = { kCubeVerts[i].x * 0.5f, kCubeVerts[i].y * 0.5f, kCubeVerts[i].z * 0.5f };
+                pInner[i] = project(vInner, cx, cy, 140.0f, 3.8f);
+            }
+            for (int i = 0; i < 12; ++i) {
+                c.drawLine(pInner[kEdges[i][0]].x, pInner[kEdges[i][0]].y,
+                           pInner[kEdges[i][1]].x, pInner[kEdges[i][1]].y, pal.secondary);
+            }
+            for (int i = 0; i < 8; ++i) {
+                c.drawLine(pOuter[i].x, pOuter[i].y, pInner[i].x, pInner[i].y, pal.highlight);
+            }
+        }
+
+        // Draw Vertices
+        for (int i = 0; i < 8; ++i) {
+            c.fillRect(pOuter[i].x - 1, pOuter[i].y - 1, 3, 3, pal.highlight);
+        }
+
+        char spdBuf[16];
+        snprintf(spdBuf, sizeof(spdBuf), "SPD %ux", _speed);
+        c.setTextColor(pal.textDim);
+        c.setCursor(DisplayManager::kWidth - 46, by + 14);
+        c.print(spdBuf);
     }
 };
 
@@ -828,47 +997,121 @@ public:
 };
 
 // ============================================================================
-// 10. DIGITAL CYBERPUNK CLOCK APPLICATION (MINIMALIST & WI-FI SYNCED)
+// 10. DIGITAL CYBERPUNK CLOCK APPLICATION (MANUAL EDIT + WI-FI SYNC)
 // ============================================================================
 class AppClock : public CyberApp {
     uint32_t _lastEpoch = 0;
     bool     _dirty     = true;
-public:
-    void onEnter() override { _dirty = true; }
+    bool     _editMode  = false;
+    uint8_t  _editField = 0; // 0=Hour, 1=Min, 2=Day, 3=Mon, 4=Year
+    int      _setHour   = 12;
+    int      _setMin    = 0;
+    int      _setDay    = 1;
+    int      _setMon    = 1;
+    int      _setYear   = 2026;
 
-    const char* hintA() const override { return "UTC TZ"; }
-    const char* hintB() const override { return "WIFI SYNC"; }
+    void loadCurrentIntoEditor() {
+        time_t local = (time_t)(Net.currentEpoch() + (Settings.get().timezoneHours * 3600));
+        struct tm tmStruct;
+        gmtime_r(&local, &tmStruct);
+        _setHour = tmStruct.tm_hour;
+        _setMin  = tmStruct.tm_min;
+        _setDay  = tmStruct.tm_mday;
+        _setMon  = tmStruct.tm_mon + 1;
+        _setYear = tmStruct.tm_year + 1900;
+        if (_setYear < 2024) _setYear = 2026;
+    }
+
+    void saveEditorTime() {
+        struct tm t = {};
+        t.tm_year = _setYear - 1900;
+        t.tm_mon  = _setMon - 1;
+        t.tm_mday = _setDay;
+        t.tm_hour = _setHour;
+        t.tm_min  = _setMin;
+        t.tm_sec  = 0;
+        t.tm_isdst = -1;
+        time_t localEpoch = mktime(&t);
+        time_t utcEpoch = localEpoch - (Settings.get().timezoneHours * 3600);
+        Net.setWifiEpoch((uint32_t)utcEpoch);
+    }
+
+public:
+    void onEnter() override {
+        _dirty = true;
+        _editMode = false;
+    }
+
+    const char* hintA() const override {
+        return _editMode ? "+1 VALUE" : "UTC TZ";
+    }
+
+    const char* hintB() const override {
+        return _editMode ? "NEXT/HOLD SAVE" : "WIFI / HOLD EDIT";
+    }
 
     void handleInput(ButtonEvent ev) override {
-        if (ev == ButtonEvent::A_SHORT) {
-            int8_t tz = Settings.get().timezoneHours + 1;
-            if (tz > 14) tz = -12;
-            Settings.get().timezoneHours = tz;
-            Settings.markDirty();
-            _dirty = true;
-            char buf[20];
-            snprintf(buf, sizeof(buf), "UTC%+d", tz);
-            UI.showToast(buf, Settings.palette().secondary, 1000);
-        } else if (ev == ButtonEvent::B_SHORT) {
-            _dirty = true;
-            if (Net.isConnected()) {
-                configTime(0, 0, "pool.ntp.org", "time.cloudflare.com", "time.google.com");
-                UI.showToast("WIFI NTP SYNC...", Settings.palette().ok, 1500);
-            } else {
-                if (Settings.hasWifiCredentials()) {
-                    Net.connectStoredWifi();
+        if (!_editMode) {
+            if (ev == ButtonEvent::A_SHORT) {
+                int8_t tz = Settings.get().timezoneHours + 1;
+                if (tz > 14) tz = -12;
+                Settings.get().timezoneHours = tz;
+                Settings.markDirty();
+                _dirty = true;
+                char buf[20];
+                snprintf(buf, sizeof(buf), "UTC%+d", tz);
+                UI.showToast(buf, Settings.palette().secondary, 1000);
+            } else if (ev == ButtonEvent::B_SHORT) {
+                _dirty = true;
+                if (Net.isConnected()) {
+                    configTime(0, 0, "pool.ntp.org", "time.cloudflare.com", "time.google.com");
+                    UI.showToast("WIFI NTP SYNC...", Settings.palette().ok, 1500);
+                } else {
+                    if (Settings.hasWifiCredentials()) {
+                        Net.connectStoredWifi();
+                    }
+                    if (!Net.isConfigPortalActive()) {
+                        Net.startConfigPortal();
+                    }
+                    UI.showToast("AP: 192.168.4.1", Settings.palette().secondary, 2200);
                 }
-                if (!Net.isConfigPortalActive()) {
-                    Net.startConfigPortal();
+            } else if (ev == ButtonEvent::B_LONG) {
+                _editMode = true;
+                _editField = 0;
+                loadCurrentIntoEditor();
+                _dirty = true;
+                UI.showToast("TIME EDIT MODE", Settings.palette().highlight, 1200);
+            }
+        } else {
+            // In manual edit mode
+            if (ev == ButtonEvent::A_SHORT) {
+                switch (_editField) {
+                    case 0: _setHour = (_setHour + 1) % 24; break;
+                    case 1: _setMin  = (_setMin + 1) % 60; break;
+                    case 2: _setDay  = (_setDay % 31) + 1; break;
+                    case 3: _setMon  = (_setMon % 12) + 1; break;
+                    case 4: _setYear = (_setYear >= 2035) ? 2024 : (_setYear + 1); break;
                 }
-                UI.showToast("AP: 192.168.4.1", Settings.palette().secondary, 2200);
+                _dirty = true;
+            } else if (ev == ButtonEvent::B_SHORT) {
+                _editField = (_editField + 1) % 5;
+                _dirty = true;
+            } else if (ev == ButtonEvent::B_LONG) {
+                saveEditorTime();
+                _editMode = false;
+                _dirty = true;
+                UI.showToast("TIME SET SAVED!", Settings.palette().ok, 1500);
+            } else if (ev == ButtonEvent::A_LONG) {
+                _editMode = false;
+                _dirty = true;
+                UI.showToast("EDIT CANCELLED", Settings.palette().warning, 1000);
             }
         }
     }
 
     void updateAndRender(int16_t yOffset) override {
         uint32_t ep = Net.currentEpoch();
-        if (yOffset == 0 && !_dirty && ep == _lastEpoch) {
+        if (yOffset == 0 && !_dirty && ep == _lastEpoch && !_editMode) {
             return;
         }
         _lastEpoch = ep;
@@ -879,20 +1122,61 @@ public:
         Display.clearBody(pal.bg);
         int16_t by = DisplayManager::kBodyY + yOffset;
 
+        bool hasRealTime = (ep > 1700000000UL);
+
+        if (_editMode) {
+            // Edit mode header
+            c.setTextSize(1);
+            c.setTextColor(pal.warning);
+            c.setCursor(14, by + 18);
+            c.print("--- SET CLOCK ---");
+
+            const char* fldNames[5] = { "EDIT: HOUR", "EDIT: MINUTE", "EDIT: DAY", "EDIT: MONTH", "EDIT: YEAR" };
+            c.setTextColor(pal.highlight);
+            c.setCursor(14, by + 34);
+            c.print(fldNames[_editField]);
+
+            // Formatted preview
+            char editHms[16], editDate[24];
+            snprintf(editHms, sizeof(editHms), "%02d:%02d", _setHour, _setMin);
+            snprintf(editDate, sizeof(editDate), "%02d.%02d.%04d", _setDay, _setMon, _setYear);
+
+            c.setTextSize(2);
+            c.setTextColor((_editField <= 1) ? pal.highlight : pal.textMain);
+            c.setCursor(35, by + 70);
+            c.print(editHms);
+
+            c.setTextSize(1);
+            c.setTextColor((_editField >= 2) ? pal.highlight : pal.secondary);
+            c.setCursor(28, by + 105);
+            c.print(editDate);
+
+            // Instructions
+            c.setTextColor(pal.textDim);
+            c.setCursor(8, by + 135);
+            c.print("[A]: +1 Value");
+            c.setCursor(8, by + 148);
+            c.print("[B]: Next field");
+            c.setCursor(8, by + 161);
+            c.print("Hold [B]: Save time");
+            c.setCursor(8, by + 174);
+            c.print("Hold [A]: Cancel");
+            return;
+        }
+
         char hms[16], dateStr[24];
         Net.getFormattedTime(hms, sizeof(hms), dateStr, sizeof(dateStr));
 
-        bool hasRealTime = (ep > 1700000000UL);
-
         // Minimalist Wi-Fi Sync Status at top
+        c.setTextSize(1);
         c.setTextColor(Net.isNtpSynced() ? pal.ok : (hasRealTime ? pal.secondary : pal.warning));
         c.setCursor(10, by + 28);
         if (Net.isNtpSynced()) {
-            c.print("WIFI SYNCED");
+            c.print("WIFI NTP SYNCED");
         } else if (hasRealTime) {
-            c.print("WIFI CACHED");
+            c.print("TIME SET OK");
         } else {
-            c.print("WAIT WIFI (PRESS B)");
+            c.print("HOLD [B] TO SET TIME");
         }
 
         // Large clean digital time in center
@@ -918,6 +1202,10 @@ public:
         c.setTextColor(pal.textDim);
         c.setCursor((DisplayManager::kWidth - tzw) / 2, by + 146);
         c.print(tzBuf);
+
+        c.setCursor(10, by + 170);
+        c.setTextColor(pal.textDim);
+        c.print("Hold B: Set clock");
     }
 };
 
@@ -1117,7 +1405,8 @@ static AppWifiRadar     s_appWifiRadar;
 static AppPacketSniffer s_appPktSniffer;
 static AppNetTools      s_appNetTools;
 static AppWebDeck       s_appWebDeck;
-static AppCryptoLab     s_appCryptoLab;
+static AppCyberEye      s_appCyberEye;
+static AppCube3D        s_appCube3D;
 static AppTerminal      s_appTerminal;
 static AppMatrix        s_appMatrix;
 static AppStarfield     s_appStarfield;
@@ -1131,7 +1420,8 @@ CyberApp* getAppInstance(AppId id) {
         case APP_PKT_SNIFFER: return &s_appPktSniffer;
         case APP_NET_TOOLS:   return &s_appNetTools;
         case APP_WEB_DECK:    return &s_appWebDeck;
-        case APP_CRYPTO_LAB:  return &s_appCryptoLab;
+        case APP_CYBER_EYE:   return &s_appCyberEye;
+        case APP_CUBE_3D:     return &s_appCube3D;
         case APP_TERMINAL:    return &s_appTerminal;
         case APP_MATRIX:      return &s_appMatrix;
         case APP_STARFIELD:   return &s_appStarfield;

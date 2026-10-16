@@ -29,10 +29,16 @@ void setup() {
     Serial.println("====================================================");
 #endif
 
-    // 1. Load persistent configuration from NVS
+    // 1. Ensure onboard status LEDs never blink and stay solid ON when device is powered
+    pinMode(2, OUTPUT);
+    digitalWrite(2, HIGH);
+    pinMode(25, OUTPUT);
+    digitalWrite(25, HIGH);
+
+    // 2. Load persistent configuration from NVS
     Settings.begin();
 
-    // 2. Initialize debounced two-button input controller
+    // 3. Initialize debounced two-button input controller
     Buttons.begin();
 
     // 3. Initialize ST7789 display & offscreen DMA sprite canvas

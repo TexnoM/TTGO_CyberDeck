@@ -223,6 +223,16 @@ void WifiManager::setupWebPortalRoutes() {
         html += "<input name='m' maxlength='22' placeholder='HACK THE PLANET!' required>";
         html += "<button type='submit'>TRANSMIT TO SCREEN</button></form>";
 
+        html += "<h2>CLOCK &amp; TIME SYNC</h2>";
+        html += "<button class='btn-c' style='width:100%;padding:10px;margin-bottom:8px;' onclick=\"fetch('/time?t='+Math.floor(Date.now()/1000),{method:'POST'}).then(r=>location.reload())\">SYNC TIME FROM THIS PHONE</button>";
+        html += "<form method='POST' action='/set_custom_time'>";
+        html += "<label>SET CUSTOM TIME (HH:MM)</label>";
+        html += "<input type='time' name='tm' required>";
+        html += "<label>SET CUSTOM DATE (YYYY-MM-DD)</label>";
+        html += "<input type='date' name='dt' required>";
+        html += "<button class='btn-c' type='submit' style='margin-top:8px;'>SET CUSTOM TIME ON DECK</button>";
+        html += "</form>";
+
         html += "<h2>WIFI &amp; NODE SETTINGS</h2>";
         html += "<form method='POST' action='/save'>";
         html += "<label>WIFI SSID</label>";
@@ -249,10 +259,43 @@ void WifiManager::setupWebPortalRoutes() {
         uint32_t ep = (uint32_t)strtoul(tStr.c_str(), nullptr, 10);
         if (ep > 1700000000UL) {
             setWifiEpoch(ep);
+            UI.showToast("TIME SYNCED VIA PHONE", Settings.palette().ok, 1600);
             _server.send(200, "text/plain", "SYNC_OK");
         } else {
             _server.send(400, "text/plain", "INVALID_EPOCH");
         }
+    });
+
+    _server.on("/set_custom_time", HTTP_POST, [this]() {
+        _webRequests++;
+        String tm = _server.arg("tm"); // "HH:MM"
+        String dt = _server.arg("dt"); // "YYYY-MM-DD"
+        if (tm.length() >= 4 && dt.length() >= 8) {
+            int hour = tm.substring(0, 2).toInt();
+            int min  = tm.substring(3, 5).toInt();
+            int year = dt.substring(0, 4).toInt();
+            int mon  = dt.substring(5, 7).toInt();
+            int day  = dt.substring(8, 10).toInt();
+
+            struct tm t{};
+            t.tm_year = max(0, year - 1900);
+            t.tm_mon  = constrain(mon - 1, 0, 11);
+            t.tm_mday = constrain(day, 1, 31);
+            t.tm_hour = constrain(hour, 0, 23);
+            t.tm_min  = constrain(min, 0, 59);
+            t.tm_sec  = 0;
+            t.tm_isdst = -1;
+
+            time_t localEp = mktime(&t);
+            if (localEp > 1700000000L) {
+                // Adjust for configured timezone to store UTC
+                time_t utcEp = localEp - ((long)Settings.get().timezoneHours * 3600L);
+                setWifiEpoch((uint32_t)utcEp);
+                UI.showToast("CUSTOM TIME SET!", Settings.palette().ok, 1800);
+            }
+        }
+        _server.sendHeader("Location", "/");
+        _server.send(303);
     });
 
     _server.on("/cmd", HTTP_POST, [this]() {
