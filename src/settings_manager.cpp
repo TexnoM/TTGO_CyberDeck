@@ -89,41 +89,164 @@ void SettingsManager::applyDefaults() {
     _settings.lastSavedEpoch  = 0; // 0 = unsynchronized (no fake hardcoded date!)
 }
 
+#include <LittleFS.h>
+#include <FS.h>
+
+static const char* kConfigFilePath = "/config.json";
+
+static bool extractJsonInt(const String& json, const char* key, int& outVal) {
+    String searchKey = String("\"") + key + "\"";
+    int idx = json.indexOf(searchKey);
+    if (idx < 0) return false;
+    int colon = json.indexOf(':', idx + searchKey.length());
+    if (colon < 0) return false;
+    outVal = json.substring(colon + 1).toInt();
+    return true;
+}
+
+static bool extractJsonBool(const String& json, const char* key, bool& outVal) {
+    String searchKey = String("\"") + key + "\"";
+    int idx = json.indexOf(searchKey);
+    if (idx < 0) return false;
+    int colon = json.indexOf(':', idx + searchKey.length());
+    if (colon < 0) return false;
+    String sub = json.substring(colon + 1);
+    sub.trim();
+    outVal = sub.startsWith("true") || sub.startsWith("1");
+    return true;
+}
+
+static bool extractJsonString(const String& json, const char* key, char* outVal, size_t maxLen) {
+    String searchKey = String("\"") + key + "\"";
+    int idx = json.indexOf(searchKey);
+    if (idx < 0) return false;
+    int colon = json.indexOf(':', idx + searchKey.length());
+    if (colon < 0) return false;
+    int q1 = json.indexOf('"', colon);
+    if (q1 < 0) return false;
+    int q2 = json.indexOf('"', q1 + 1);
+    if (q2 < 0) return false;
+    String val = json.substring(q1 + 1, q2);
+    std::strncpy(outVal, val.c_str(), maxLen - 1);
+    outVal[maxLen - 1] = '\0';
+    return true;
+}
+
+bool SettingsManager::loadFromLittleFS() {
+    if (!_littleFsOk) return false;
+    if (!LittleFS.exists(kConfigFilePath)) return false;
+
+    File f = LittleFS.open(kConfigFilePath, "r");
+    if (!f) return false;
+
+    String json = f.readString();
+    f.close();
+
+    int intVal = 0;
+    bool boolVal = false;
+
+    if (extractJsonInt(json, "theme", intVal)) _settings.themeId = (uint8_t)(intVal % THEME_COUNT);
+    if (extractJsonInt(json, "bright", intVal)) _settings.brightness = (uint8_t)constrain(intVal, 25, 255);
+    if (extractJsonInt(json, "animInt", intVal)) _settings.animIntensity = (uint8_t)constrain(intVal, 0, 2);
+    if (extractJsonInt(json, "animSpd", intVal)) _settings.animSpeed = (uint8_t)constrain(intVal, 0, 2);
+    if (extractJsonInt(json, "tgtFps", intVal)) {
+        if (intVal == 30 || intVal == 60 || intVal == 90 || intVal == 120) {
+            _settings.targetFps = (uint8_t)intVal;
+        }
+    }
+    if (extractJsonBool(json, "sound", boolVal)) _settings.soundEnabled = boolVal;
+    if (extractJsonBool(json, "fpsOvr", boolVal)) _settings.showFpsOverlay = boolVal;
+    if (extractJsonInt(json, "rot", intVal)) _settings.displayRotation = (uint8_t)(intVal & 3);
+    if (extractJsonInt(json, "mtxSpd", intVal)) _settings.matrixSpeed = (uint8_t)constrain(intVal, 1, 5);
+    if (extractJsonInt(json, "mtxDen", intVal)) _settings.matrixDensity = (uint8_t)constrain(intVal, 1, 5);
+    if (extractJsonInt(json, "strSpd", intVal)) _settings.starfieldSpeed = (uint8_t)constrain(intVal, 1, 5);
+    if (extractJsonInt(json, "tzHrs", intVal)) _settings.timezoneHours = (int8_t)constrain(intVal, -12, 14);
+
+    char hostBuf[48];
+    if (extractJsonString(json, "pingHost", hostBuf, sizeof(hostBuf))) {
+        std::strncpy(_settings.pingHost, hostBuf, sizeof(_settings.pingHost) - 1);
+        _settings.pingHost[sizeof(_settings.pingHost) - 1] = '\0';
+    }
+
+    if (extractJsonInt(json, "epoch", intVal)) {
+        _settings.lastSavedEpoch = (uint32_t)intVal;
+    }
+
+    return true;
+}
+
+bool SettingsManager::saveToLittleFS() {
+    if (!_littleFsOk) return false;
+    File f = LittleFS.open(kConfigFilePath, "w");
+    if (!f) return false;
+
+    String json = "{\n";
+    json += "  \"theme\": " + String(_settings.themeId) + ",\n";
+    json += "  \"bright\": " + String(_settings.brightness) + ",\n";
+    json += "  \"animInt\": " + String(_settings.animIntensity) + ",\n";
+    json += "  \"animSpd\": " + String(_settings.animSpeed) + ",\n";
+    json += "  \"tgtFps\": " + String(_settings.targetFps) + ",\n";
+    json += "  \"sound\": " + String(_settings.soundEnabled ? "true" : "false") + ",\n";
+    json += "  \"fpsOvr\": " + String(_settings.showFpsOverlay ? "true" : "false") + ",\n";
+    json += "  \"rot\": " + String(_settings.displayRotation) + ",\n";
+    json += "  \"mtxSpd\": " + String(_settings.matrixSpeed) + ",\n";
+    json += "  \"mtxDen\": " + String(_settings.matrixDensity) + ",\n";
+    json += "  \"strSpd\": " + String(_settings.starfieldSpeed) + ",\n";
+    json += "  \"tzHrs\": " + String(_settings.timezoneHours) + ",\n";
+    json += "  \"pingHost\": \"" + String(_settings.pingHost) + "\",\n";
+    json += "  \"epoch\": " + String(_settings.lastSavedEpoch) + "\n";
+    json += "}\n";
+
+    f.print(json);
+    f.close();
+    return true;
+}
+
 void SettingsManager::begin() {
+    _littleFsOk = LittleFS.begin(true /* formatOnFail */);
     applyDefaults();
     load();
 }
 
 void SettingsManager::load() {
-    if (!_prefs.begin("neondeck_cfg", true)) {
+    // 1. First try loading from LittleFS (/config.json) as in Bruce firmware
+    if (loadFromLittleFS()) {
+        _dirty = false;
         return;
     }
-    uint32_t magic = _prefs.getUInt("magic", 0);
-    if (magic == 0x4E454F31UL) { // "NEO1"
-        _settings.themeId         = _prefs.getUChar("theme", _settings.themeId) % THEME_COUNT;
-        _settings.brightness      = constrain(_prefs.getUChar("bright", _settings.brightness), 25, 255);
-        _settings.animIntensity   = constrain(_prefs.getUChar("animInt", _settings.animIntensity), 0, 2);
-        _settings.animSpeed       = constrain(_prefs.getUChar("animSpd", _settings.animSpeed), 0, 2);
-        _settings.targetFps       = _prefs.getUChar("tgtFps", _settings.targetFps);
-        if (_settings.targetFps != 30 && _settings.targetFps != 60 &&
-            _settings.targetFps != 90 && _settings.targetFps != 120) {
-            _settings.targetFps = DEFAULT_TARGET_FPS;
+
+    // 2. Fallback to NVS if LittleFS config not yet initialized
+    if (_prefs.begin("neondeck_cfg", true)) {
+        uint32_t magic = _prefs.getUInt("magic", 0);
+        if (magic == 0x4E454F31UL) { // "NEO1"
+            _settings.themeId         = _prefs.getUChar("theme", _settings.themeId) % THEME_COUNT;
+            _settings.brightness      = constrain(_prefs.getUChar("bright", _settings.brightness), 25, 255);
+            _settings.animIntensity   = constrain(_prefs.getUChar("animInt", _settings.animIntensity), 0, 2);
+            _settings.animSpeed       = constrain(_prefs.getUChar("animSpd", _settings.animSpeed), 0, 2);
+            _settings.targetFps       = _prefs.getUChar("tgtFps", _settings.targetFps);
+            if (_settings.targetFps != 30 && _settings.targetFps != 60 &&
+                _settings.targetFps != 90 && _settings.targetFps != 120) {
+                _settings.targetFps = DEFAULT_TARGET_FPS;
+            }
+            _settings.soundEnabled    = _prefs.getBool("sound", _settings.soundEnabled);
+            _settings.showFpsOverlay  = _prefs.getBool("fpsOvr", _settings.showFpsOverlay);
+            _settings.displayRotation = _prefs.getUChar("rot", _settings.displayRotation) & 3;
+            _settings.matrixSpeed     = constrain(_prefs.getUChar("mtxSpd", _settings.matrixSpeed), 1, 5);
+            _settings.matrixDensity   = constrain(_prefs.getUChar("mtxDen", _settings.matrixDensity), 1, 5);
+            _settings.starfieldSpeed  = constrain(_prefs.getUChar("strSpd", _settings.starfieldSpeed), 1, 5);
+            _settings.timezoneHours   = constrain(_prefs.getChar("tzHrs", _settings.timezoneHours), -12, 14);
+            String host = _prefs.getString("pingHost", _settings.pingHost);
+            if (host.length() > 0) {
+                std::strncpy(_settings.pingHost, host.c_str(), sizeof(_settings.pingHost) - 1);
+                _settings.pingHost[sizeof(_settings.pingHost) - 1] = '\0';
+            }
+            _settings.lastSavedEpoch  = _prefs.getUInt("epoch", _settings.lastSavedEpoch);
         }
-        _settings.soundEnabled    = _prefs.getBool("sound", _settings.soundEnabled);
-        _settings.showFpsOverlay  = _prefs.getBool("fpsOvr", _settings.showFpsOverlay);
-        _settings.displayRotation = _prefs.getUChar("rot", _settings.displayRotation) & 3;
-        _settings.matrixSpeed     = constrain(_prefs.getUChar("mtxSpd", _settings.matrixSpeed), 1, 5);
-        _settings.matrixDensity   = constrain(_prefs.getUChar("mtxDen", _settings.matrixDensity), 1, 5);
-        _settings.starfieldSpeed  = constrain(_prefs.getUChar("strSpd", _settings.starfieldSpeed), 1, 5);
-        _settings.timezoneHours   = constrain(_prefs.getChar("tzHrs", _settings.timezoneHours), -12, 14);
-        String host = _prefs.getString("pingHost", _settings.pingHost);
-        if (host.length() > 0) {
-            std::strncpy(_settings.pingHost, host.c_str(), sizeof(_settings.pingHost) - 1);
-            _settings.pingHost[sizeof(_settings.pingHost) - 1] = '\0';
-        }
-        _settings.lastSavedEpoch  = _prefs.getUInt("epoch", _settings.lastSavedEpoch);
+        _prefs.end();
     }
-    _prefs.end();
+
+    // Save initial config to LittleFS for subsequent boots
+    saveToLittleFS();
     _dirty = false;
 }
 
@@ -133,25 +256,28 @@ void SettingsManager::saveIfDirty() {
 }
 
 void SettingsManager::forceSave() {
-    if (!_prefs.begin("neondeck_cfg", false)) {
-        return;
+    // 1. Save config to LittleFS (/config.json)
+    saveToLittleFS();
+
+    // 2. Mirror to NVS as backup
+    if (_prefs.begin("neondeck_cfg", false)) {
+        _prefs.putUInt("magic", 0x4E454F31UL);
+        _prefs.putUChar("theme", _settings.themeId);
+        _prefs.putUChar("bright", _settings.brightness);
+        _prefs.putUChar("animInt", _settings.animIntensity);
+        _prefs.putUChar("animSpd", _settings.animSpeed);
+        _prefs.putUChar("tgtFps", _settings.targetFps);
+        _prefs.putBool("sound", _settings.soundEnabled);
+        _prefs.putBool("fpsOvr", _settings.showFpsOverlay);
+        _prefs.putUChar("rot", _settings.displayRotation);
+        _prefs.putUChar("mtxSpd", _settings.matrixSpeed);
+        _prefs.putUChar("mtxDen", _settings.matrixDensity);
+        _prefs.putUChar("strSpd", _settings.starfieldSpeed);
+        _prefs.putChar("tzHrs", _settings.timezoneHours);
+        _prefs.putString("pingHost", _settings.pingHost);
+        _prefs.putUInt("epoch", _settings.lastSavedEpoch);
+        _prefs.end();
     }
-    _prefs.putUInt("magic", 0x4E454F31UL);
-    _prefs.putUChar("theme", _settings.themeId);
-    _prefs.putUChar("bright", _settings.brightness);
-    _prefs.putUChar("animInt", _settings.animIntensity);
-    _prefs.putUChar("animSpd", _settings.animSpeed);
-    _prefs.putUChar("tgtFps", _settings.targetFps);
-    _prefs.putBool("sound", _settings.soundEnabled);
-    _prefs.putBool("fpsOvr", _settings.showFpsOverlay);
-    _prefs.putUChar("rot", _settings.displayRotation);
-    _prefs.putUChar("mtxSpd", _settings.matrixSpeed);
-    _prefs.putUChar("mtxDen", _settings.matrixDensity);
-    _prefs.putUChar("strSpd", _settings.starfieldSpeed);
-    _prefs.putChar("tzHrs", _settings.timezoneHours);
-    _prefs.putString("pingHost", _settings.pingHost);
-    _prefs.putUInt("epoch", _settings.lastSavedEpoch);
-    _prefs.end();
     _dirty = false;
 }
 

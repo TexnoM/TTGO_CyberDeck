@@ -699,6 +699,19 @@ public:
         c.setTextColor(pal.textDim);
         c.setCursor(DisplayManager::kWidth - 46, by + 14);
         c.print(spdBuf);
+
+        // Real-time FPS & Frame time Diagnostics for 3D demo
+        char fpsBuf[16];
+        snprintf(fpsBuf, sizeof(fpsBuf), "%.0f FPS", Anim.fps());
+        c.setTextColor(pal.ok);
+        c.setCursor(10, by + 172);
+        c.print(fpsBuf);
+
+        char frameTimeBuf[16];
+        snprintf(frameTimeBuf, sizeof(frameTimeBuf), "%.1f ms", Anim.frameTimeMs());
+        c.setTextColor(pal.textDim);
+        c.setCursor(DisplayManager::kWidth - 48, by + 172);
+        c.print(frameTimeBuf);
     }
 };
 

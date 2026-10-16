@@ -55,6 +55,7 @@ public:
     const SystemSettings& get() const { return _settings; }
     void markDirty() { _dirty = true; }
     bool isDirty() const { return _dirty; }
+    bool isLittleFsMounted() const { return _littleFsOk; }
 
     const ColorPalette& palette() const;
     const ColorPalette& paletteById(uint8_t id) const;
@@ -73,9 +74,12 @@ public:
 private:
     Preferences    _prefs;
     SystemSettings _settings;
-    bool           _dirty = false;
+    bool           _dirty      = false;
+    bool           _littleFsOk = false;
 
     void applyDefaults();
+    bool loadFromLittleFS();
+    bool saveToLittleFS();
 };
 
 extern SettingsManager Settings;
