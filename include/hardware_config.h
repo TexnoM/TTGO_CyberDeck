@@ -2,7 +2,7 @@
 #include <Arduino.h>
 
 // ============================================================================
-// NEON DECK — HARDWARE CONFIGURATION & CLONE COMPATIBILITY MATRIX
+// TTGO_CyberDeck — HARDWARE CONFIGURATION & CLONE COMPATIBILITY MATRIX
 // ============================================================================
 // Target: Chinese Clone of LilyGO TTGO T-Display 1.14" (ESP32 + ST7789 135x240)
 //
@@ -21,16 +21,6 @@
 //    - CGRAM Offset: X=53, Y=40 (fixes 1px garbage line on right/bottom edge)
 //    - Color Inversion: sometimes FALSE on cheaper TN panels
 //    - Enable via -DHW_PROFILE_VARIANT_B=1 in platformio.ini or uncomment below
-//
-// HOW TO VERIFY YOUR BOARD'S PINOUT:
-// ----------------------------------------------------------------------------
-// - Boot with Serial Monitor at 115200 baud: NEON DECK prints active pins and
-//   button GPIO state changes in real time when Hardware Diagnostics is enabled.
-// - If you see a 1-pixel colored noise line along the edge: change TFT_OFFSET_X
-//   from 52 to 53 (or 51) and TFT_OFFSET_Y from 40 to 41.
-// - If colors look like a photo negative (white background instead of black):
-//   toggle TFT_INVERT_COLORS between true and false.
-// - If backlight stays dark: toggle TFT_BL_ACTIVE_HIGH or check PIN_TFT_BL.
 // ============================================================================
 
 // Uncomment to select Variant B directly in this header:
@@ -113,15 +103,14 @@
 #define TFT_RGB_ORDER       false
 #endif
 
-// SPI Clock Frequency in Hz:
-// 40 MHz is rock-solid on all clones; 80 MHz works on most short-trace PCBs.
+// SPI Clock Frequency in Hz (40 MHz is rock-solid on all clones)
 #ifndef TFT_SPI_FREQ_HZ
 #define TFT_SPI_FREQ_HZ     40000000
 #endif
 
-// Backlight PWM Configuration
+// Backlight PWM Configuration (25 kHz high-freq PWM for zero flicker)
 #ifndef TFT_BL_PWM_FREQ
-#define TFT_BL_PWM_FREQ     12000
+#define TFT_BL_PWM_FREQ     25000
 #endif
 
 #ifndef TFT_BL_PWM_BITS
@@ -131,13 +120,10 @@
 // ----------------------------------------------------------------------------
 // 2. TWO-BUTTON INPUT CONFIGURATION
 // ----------------------------------------------------------------------------
-// Button A: Navigation / Next (Short) | Back / Exit (Long)
 #ifndef PIN_BTN_A
 #define PIN_BTN_A           0
 #endif
 
-// Button B: Select / Confirm (Short) | Quick Menu (Long)
-// Note: GPIO 35 is input-only on ESP32 and uses an onboard external pull-up.
 #ifndef PIN_BTN_B
 #define PIN_BTN_B           35
 #endif
@@ -146,7 +132,6 @@
 #define BTN_ACTIVE_LOW      true
 #endif
 
-// Debounce and gesture timing in milliseconds
 #ifndef BTN_DEBOUNCE_MS
 #define BTN_DEBOUNCE_MS     28
 #endif
@@ -162,10 +147,6 @@
 // ----------------------------------------------------------------------------
 // 3. OPTIONAL BATTERY VOLTAGE SENSING & AUDIO
 // ----------------------------------------------------------------------------
-// TTGO T-Display has a voltage divider on GPIO 34 enabled by GPIO 14.
-// Set BATTERY_SENSE_ENABLED to true to measure real LiPo voltage.
-// NEON DECK automatically validates the ADC reading and hides the battery
-// indicator if no plausible battery/USB voltage is detected.
 #ifndef BATTERY_SENSE_ENABLED
 #define BATTERY_SENSE_ENABLED true
 #endif
@@ -178,7 +159,6 @@
 #define PIN_BAT_ADC_EN      14
 #endif
 
-// Optional passive piezo buzzer pin (-1 = no buzzer hardware connected)
 #ifndef PIN_BUZZER
 #define PIN_BUZZER          -1
 #endif
@@ -186,15 +166,10 @@
 // ----------------------------------------------------------------------------
 // 4. PERFORMANCE & ENGINE TARGETS
 // ----------------------------------------------------------------------------
-// NOTE: 120 Hz is an engine timing option, NOT an assumed physical capability
-// of the ST7789 panel. At 40 MHz SPI, a full 135x240x16bpp frame transfer takes
-// ~13 ms (~75 FPS theoretical bus max), while partial/dirty-region updates can
-// run faster. Default target is 60 FPS for rock-solid frame pacing.
 #ifndef DEFAULT_TARGET_FPS
 #define DEFAULT_TARGET_FPS  60
 #endif
 
-// Enable Serial Hardware Diagnostic Logging on boot and button events
 #ifndef HW_SERIAL_DIAGNOSTICS
 #define HW_SERIAL_DIAGNOSTICS true
 #endif

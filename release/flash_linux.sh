@@ -10,7 +10,7 @@ fi
 
 if [ -z "$PORT" ]; then
     echo "=========================================================="
-    echo " Помилка: Плату ESP32 (TTGO T-Display) не знайдено!"
+    echo " Помилка: Плату ESP32 (TTGO_CyberDeck) не знайдено!"
     echo " Підключіть плату кабелем USB та запустіть знову:"
     echo "   sudo ./flash_linux.sh"
     echo " Або вкажіть порт вручну:"
@@ -33,9 +33,9 @@ if [ -z "$ESPTOOL" ] || [ ! -x "$ESPTOOL" ]; then
     fi
 fi
 
-BIN_FILE="$SCRIPT_DIR/NEON-DECK-ttgo-t-display.bin"
-if [ ! -f "$BIN_FILE" ] && [ -f "$SCRIPT_DIR/release/NEON-DECK-ttgo-t-display.bin" ]; then
-    BIN_FILE="$SCRIPT_DIR/release/NEON-DECK-ttgo-t-display.bin"
+BIN_FILE="$SCRIPT_DIR/TTGO_CyberDeck.bin"
+if [ ! -f "$BIN_FILE" ] && [ -f "$SCRIPT_DIR/release/TTGO_CyberDeck.bin" ]; then
+    BIN_FILE="$SCRIPT_DIR/release/TTGO_CyberDeck.bin"
 fi
 
 echo "=========================================================="
@@ -44,11 +44,11 @@ echo "=========================================================="
 "$ESPTOOL" --chip esp32 -p "$PORT" erase_flash
 
 echo "=========================================================="
-echo " 2. Прошивання NEON DECK Firmware у порт $PORT"
+echo " 2. Прошивання TTGO_CyberDeck Firmware у порт $PORT"
 echo "=========================================================="
 "$ESPTOOL" --chip esp32 -p "$PORT" -b 921600 write_flash 0x0 "$BIN_FILE"
 
 echo ""
 echo "=========================================================="
-echo " Прошивання завершено! Натисніть RESET на TTGO T-Display."
+echo " Прошивання завершено! Натисніть RESET на TTGO_CyberDeck."
 echo "=========================================================="

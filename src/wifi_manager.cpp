@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstring>
 #include <ctime>
+#include <sys/time.h>
 #include <esp_wifi.h>
 #include <lwip/sockets.h>
 #include <lwip/inet.h>
@@ -51,7 +52,7 @@ static void IRAM_ATTR wifiPromiscuousCb(void* buf, wifi_promiscuous_pkt_type_t t
 static const char kPortalHtmlHead[] PROGMEM = R"rawliteral(
 <!DOCTYPE html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NEON DECK // CYBER CONSOLE</title>
+<title>TTGO_CyberDeck // CYBER CONSOLE</title>
 <style>
 body{background:#050807;color:#d8ffe4;font-family:monospace;margin:0;padding:12px;}
 .card{max-width:420px;margin:0 auto 12px auto;border:1px solid #00ff6e;background:#0a1610;padding:14px;box-shadow:0 0 14px rgba(0,255,110,0.18);}
@@ -66,16 +67,20 @@ button{width:100%;margin-top:10px;padding:9px;background:#00ff6e;color:#040a07;b
 .btn2{background:#0a1610;color:#ff3246;border:1px solid #ff3246;}
 .stat{font-size:11px;color:#ffb900;padding:6px;border:1px dashed #ffb900;margin-bottom:8px;line-height:1.5;}
 </style></head><body><div class="card">
-<h1>NEON DECK // WEB OS</h1>
+<h1>TTGO_CyberDeck // WEB OS</h1>
 <div class="sub">REMOTE CYBERDECK COMMAND &amp; TELEMETRY</div>
 )rawliteral";
 
 void WifiManager::begin() {
     uint32_t chipId = (uint32_t)(ESP.getEfuseMac() >> 32) ^ (uint32_t)ESP.getEfuseMac();
-    snprintf(_apSsid, sizeof(_apSsid), "NEON-DECK-%04X", (uint16_t)(chipId & 0xFFFF));
+    snprintf(_apSsid, sizeof(_apSsid), "TTGO-CyberDeck-%04X", (uint16_t)(chipId & 0xFFFF));
 
     _bootEpochBase    = Settings.get().lastSavedEpoch;
     _bootMillisAtBase = millis();
+    if (_bootEpochBase > 1700000000UL) {
+        struct timeval tv{ (time_t)_bootEpochBase, 0 };
+        settimeofday(&tv, nullptr);
+    }
 
 #if BATTERY_SENSE_ENABLED
     if (PIN_BAT_ADC_EN >= 0) {
@@ -190,10 +195,12 @@ uint8_t WifiManager::portalClientCount() const {
 void WifiManager::setupWebPortalRoutes() {
     _server.on("/", HTTP_GET, [this]() {
         _webRequests++;
+        char hms[16], dateStr[24];
+        getFormattedTime(hms, sizeof(hms), dateStr, sizeof(dateStr));
         String html = FPSTR(kPortalHtmlHead);
         html += "<div class='stat'>";
-        html += "<b>MCU:</b> ESP32 240MHz | <b>FREE RAM:</b> " + String(ESP.getFreeHeap() / 1024) + " KB<br>";
-        html += "<b>FPS:</b> " + String((int)(Anim.fps() + 0.5f)) + " | <b>THEME:</b> " + String(Settings.palette().name) + "<br>";
+        html += "<b>MCU:</b> ESP32 " + String(ESP.getCpuFreqMHz()) + "MHz | <b>FREE RAM:</b> " + String(ESP.getFreeHeap() / 1024) + " KB<br>";
+        html += "<b>FPS:</b> " + String((int)(Anim.fps() + 0.5f)) + " | <b>CLOCK:</b> <span id='clk'>" + String(hms) + " (" + String(dateStr) + ")</span><br>";
         if (isConnected()) {
             html += "<b>WIFI:</b> " + connectedSsid() + " (" + String(currentRssi()) + " dBm) // " + localIp();
         } else {
@@ -231,8 +238,21 @@ void WifiManager::setupWebPortalRoutes() {
         html += "<button type='submit'>SAVE &amp; CONNECT</button>";
         html += "</form>";
         html += "<form method='POST' action='/clear'><button class='btn2' type='submit'>WIPE STORED WIFI</button></form>";
+        html += "<script>fetch('/time?t='+Math.floor(Date.now()/1000),{method:'POST'});</script>";
         html += "</div></body></html>";
         _server.send(200, "text/html", html);
+    });
+
+    _server.on("/time", HTTP_ANY, [this]() {
+        _webRequests++;
+        String tStr = _server.arg("t");
+        uint32_t ep = (uint32_t)strtoul(tStr.c_str(), nullptr, 10);
+        if (ep > 1700000000UL) {
+            setWifiEpoch(ep);
+            _server.send(200, "text/plain", "SYNC_OK");
+        } else {
+            _server.send(400, "text/plain", "INVALID_EPOCH");
+        }
     });
 
     _server.on("/cmd", HTTP_POST, [this]() {
@@ -638,11 +658,21 @@ void WifiManager::executeSinglePing() {
     _ping.inProgress = false;
 }
 
+void WifiManager::setWifiEpoch(uint32_t unixEpochUtc) {
+    if (unixEpochUtc <= 1700000000UL) return;
+    struct timeval tv{ (time_t)unixEpochUtc, 0 };
+    settimeofday(&tv, nullptr);
+    _bootEpochBase    = unixEpochUtc;
+    _bootMillisAtBase = millis();
+    _ntpSynced        = true;
+    _lastEpochSaveMs  = _bootMillisAtBase;
+    Settings.saveLastEpoch(unixEpochUtc);
+}
+
 void WifiManager::updateTimeSync() {
     uint32_t now = millis();
     if (isConnected() && !_ntpConfigured) {
-        long gmtOffset = (long)Settings.get().timezoneHours * 3600L;
-        configTime(gmtOffset, 0, "pool.ntp.org", "time.cloudflare.com", "time.google.com");
+        configTime(0, 0, "pool.ntp.org", "time.cloudflare.com", "time.google.com");
         ensureWebServerStarted();
         _ntpConfigured = true;
     }
@@ -663,18 +693,30 @@ void WifiManager::updateTimeSync() {
 }
 
 uint32_t WifiManager::currentEpoch() const {
-    if (_ntpSynced) {
-        time_t rawNow = time(nullptr);
-        if (rawNow > 1700000000L) {
-            return (uint32_t)rawNow;
-        }
+    time_t rawNow = time(nullptr);
+    if (rawNow > 1700000000L) {
+        return (uint32_t)rawNow;
     }
-    uint32_t elapsedSec = (millis() - _bootMillisAtBase) / 1000UL;
-    return _bootEpochBase + elapsedSec;
+    if (_bootEpochBase > 1700000000UL) {
+        uint32_t elapsedSec = (millis() - _bootMillisAtBase) / 1000UL;
+        return _bootEpochBase + elapsedSec;
+    }
+    return millis() / 1000UL;
 }
 
 void WifiManager::getFormattedTime(char* hmsOut, size_t hmsLen, char* dateOut, size_t dateLen) const {
-    time_t ep = (time_t)currentEpoch() + ((long)Settings.get().timezoneHours * 3600L);
+    uint32_t utcEp = currentEpoch();
+    if (utcEp <= 1700000000UL) {
+        if (hmsOut && hmsLen > 0) {
+            snprintf(hmsOut, hmsLen, "--:--:--");
+        }
+        if (dateOut && dateLen > 0) {
+            snprintf(dateOut, dateLen, "WAIT WIFI SYNC");
+        }
+        return;
+    }
+
+    time_t ep = (time_t)utcEp + ((long)Settings.get().timezoneHours * 3600L);
     struct tm tInfo{};
     gmtime_r(&ep, &tInfo);
     if (hmsOut && hmsLen > 0) {

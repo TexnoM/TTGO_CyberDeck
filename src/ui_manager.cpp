@@ -10,10 +10,11 @@ UIManager UI;
 static constexpr uint8_t kQuickMenuCount = 6;
 
 void UIManager::begin() {
-    _state        = SystemState::BOOT_SEQUENCE;
-    _bootStartMs  = millis();
-    _selectedApp  = 0;
-    _nextGlitchMs = millis() + 3200;
+    _state         = SystemState::BOOT_SEQUENCE;
+    _bootStartMs   = millis();
+    _selectedApp   = 0;
+    _nextGlitchMs  = millis() + 1800;
+    _glitchPattern = 0;
     invalidateAll();
 }
 
@@ -42,7 +43,7 @@ void UIManager::returnToLauncher() {
     Settings.saveIfDirty();
     _state = SystemState::LAUNCHER;
     _transitionTween.start(-28.0f, 0.0f, 190, EasingType::OUT_EXPO);
-    _nextGlitchMs = millis() + 2400;
+    _nextGlitchMs = millis() + 1400;
     invalidateAll();
 }
 
@@ -138,7 +139,6 @@ void UIManager::handleInput(ButtonEvent ev) {
         return;
     }
 
-    // Simultaneous A+B chord shortcut: instant theme cycle
     if (ev == ButtonEvent::CHORD_AB) {
         Settings.get().themeId = (Settings.get().themeId + 1) % THEME_COUNT;
         Settings.markDirty();
@@ -165,7 +165,6 @@ void UIManager::handleInput(ButtonEvent ev) {
         return;
     }
 
-    // Long press on Button B opens the Quick Menu from anywhere
     if (ev == ButtonEvent::B_LONG) {
         _quickMenuOpen = true;
         _quickMenuTween.start(24.0f, 0.0f, 150, EasingType::OUT_CUBIC);
@@ -203,48 +202,24 @@ void UIManager::drawHeader(const char* title) {
     auto& c = Display.canvas();
     const ColorPalette& pal = Settings.palette();
 
-    c.fillRect(0, 0, DisplayManager::kWidth, DisplayManager::kHeaderH, pal.panelBg);
-    c.drawFastHLine(0, DisplayManager::kHeaderH - 1, DisplayManager::kWidth, pal.primary);
-    c.drawFastHLine(0, DisplayManager::kHeaderH - 2, 26, pal.secondary);
+    c.fillRect(0, 0, DisplayManager::kWidth, DisplayManager::kHeaderH, pal.bg);
+    c.drawFastHLine(0, DisplayManager::kHeaderH - 1, DisplayManager::kWidth, pal.gridDim);
 
     c.setTextSize(1);
-    c.setTextColor(pal.primary, pal.panelBg);
-    c.setCursor(4, 5);
+    c.setTextColor(pal.primary, pal.bg);
+    c.setCursor(6, 5);
     c.print(title);
 
-    int16_t rightCursor = DisplayManager::kWidth - 3;
+    int16_t rightCursor = DisplayManager::kWidth - 5;
 
-    // 1. Battery Indicator ONLY when a real valid battery measurement is present
-    if (Net.hasValidBattery()) {
-        rightCursor -= 18;
-        uint8_t pct = Net.batteryPercent();
-        uint16_t batCol = (pct > 25) ? pal.ok : pal.danger;
-        c.drawRect(rightCursor, 5, 14, 8, pal.textDim);
-        c.fillRect(rightCursor + 14, 7, 2, 4, pal.textDim);
-        int16_t fillW = (10 * pct) / 100;
-        if (fillW > 0) {
-            c.fillRect(rightCursor + 2, 7, fillW, 4, batCol);
-        }
-        rightCursor -= 3;
-    }
-
-    // 2. Network / Sniffer / AP Status Indicator
-    if (Net.sniffer().active) {
-        rightCursor -= 22;
-        c.fillRect(rightCursor, 4, 21, 10, pal.secondary);
-        c.setTextColor(pal.bg, pal.secondary);
-        c.setCursor(rightCursor + 2, 5);
-        c.print("SNF");
-        rightCursor -= 3;
-    } else if (Net.isConfigPortalActive()) {
-        rightCursor -= 16;
-        c.fillRect(rightCursor, 4, 15, 10, pal.warning);
-        c.setTextColor(pal.bg, pal.warning);
-        c.setCursor(rightCursor + 2, 5);
+    if (Net.isConfigPortalActive()) {
+        rightCursor -= 14;
+        c.setTextColor(pal.warning, pal.bg);
+        c.setCursor(rightCursor, 5);
         c.print("AP");
-        rightCursor -= 3;
+        rightCursor -= 4;
     } else if (Net.isConnected()) {
-        rightCursor -= 15;
+        rightCursor -= 14;
         int32_t rssi = Net.currentRssi();
         int bars = (rssi > -60) ? 4 : (rssi > -72) ? 3 : (rssi > -82) ? 2 : 1;
         for (int b = 0; b < 4; ++b) {
@@ -252,21 +227,14 @@ void UIManager::drawHeader(const char* title) {
             uint16_t col = (b < bars) ? pal.ok : pal.gridDim;
             c.fillRect(rightCursor + b * 4, 13 - bh, 2, bh, col);
         }
-        rightCursor -= 3;
-    } else {
-        rightCursor -= 14;
-        c.setTextColor(pal.textDim, pal.panelBg);
-        c.setCursor(rightCursor, 5);
-        c.print("--");
-        rightCursor -= 2;
+        rightCursor -= 4;
     }
 
-    // 3. FPS Overlay Badge if enabled
     if (Settings.get().showFpsOverlay) {
         char fpsBuf[10];
         snprintf(fpsBuf, sizeof(fpsBuf), "%2uF", (unsigned)(Anim.fps() + 0.5f));
         rightCursor -= 20;
-        c.setTextColor(pal.secondary, pal.panelBg);
+        c.setTextColor(pal.secondary, pal.bg);
         c.setCursor(rightCursor, 5);
         c.print(fpsBuf);
     }
@@ -279,44 +247,33 @@ void UIManager::drawFooter(const char* hintA, const char* hintB) {
     const ColorPalette& pal = Settings.palette();
     int16_t y = DisplayManager::kHeight - DisplayManager::kFooterH;
 
-    c.fillRect(0, y, DisplayManager::kWidth, DisplayManager::kFooterH, pal.panelBg);
+    c.fillRect(0, y, DisplayManager::kWidth, DisplayManager::kFooterH, pal.bg);
     c.drawFastHLine(0, y, DisplayManager::kWidth, pal.gridDim);
 
     float holdA = Buttons.holdProgressA();
     float holdB = Buttons.holdProgressB();
     if (holdA > 0.01f) {
-        int16_t wA = (int16_t)(65.0f * holdA);
-        c.fillRect(0, y, wA, 2, pal.warning);
+        c.fillRect(0, y, (int16_t)(65.0f * holdA), 2, pal.primary);
     }
     if (holdB > 0.01f) {
         int16_t wB = (int16_t)(65.0f * holdB);
         c.fillRect(DisplayManager::kWidth - wB, y, wB, 2, pal.secondary);
     }
 
-    // Left badge [A]
-    uint16_t bgA = Buttons.isPressedA() ? pal.primary : pal.gridDim;
-    uint16_t fgA = Buttons.isPressedA() ? pal.bg : pal.primary;
-    c.fillRect(2, y + 4, 11, 11, bgA);
-    c.setTextColor(fgA, bgA);
-    c.setCursor(4, y + 6);
-    c.print("A");
-
-    c.setTextColor(pal.textMain, pal.panelBg);
-    c.setCursor(15, y + 6);
+    c.setTextColor(Buttons.isPressedA() ? pal.highlight : pal.primary, pal.bg);
+    c.setCursor(6, y + 6);
+    c.print("A:");
+    c.setTextColor(pal.textDim, pal.bg);
+    c.setCursor(18, y + 6);
     c.print(hintA);
 
-    // Right badge [B]
-    int16_t bTextW = std::strlen(hintB) * 6;
-    int16_t bBoxX  = DisplayManager::kWidth - 13;
-    uint16_t bgB = Buttons.isPressedB() ? pal.secondary : pal.gridDim;
-    uint16_t fgB = Buttons.isPressedB() ? pal.bg : pal.secondary;
-    c.fillRect(bBoxX, y + 4, 11, 11, bgB);
-    c.setTextColor(fgB, bgB);
-    c.setCursor(bBoxX + 3, y + 6);
-    c.print("B");
-
-    c.setTextColor(pal.textMain, pal.panelBg);
-    c.setCursor(max<int16_t>(66, bBoxX - bTextW - 3), y + 6);
+    int16_t bTextW = (std::strlen(hintB) + 2) * 6;
+    int16_t bx = max<int16_t>(68, DisplayManager::kWidth - 6 - bTextW);
+    c.setTextColor(Buttons.isPressedB() ? pal.highlight : pal.secondary, pal.bg);
+    c.setCursor(bx, y + 6);
+    c.print("B:");
+    c.setTextColor(pal.textDim, pal.bg);
+    c.setCursor(bx + 12, y + 6);
     c.print(hintB);
 
     Display.markFooterDirty();
@@ -326,26 +283,20 @@ void UIManager::drawMenuRow(int16_t y, const char* label, const char* value, boo
     auto& c = Display.canvas();
     const ColorPalette& pal = Settings.palette();
 
-    int16_t rowW = DisplayManager::kWidth - 10; // Leave 4px on right for scrollbar
-    uint16_t rowBg  = selected ? AnimationEngine::lerpColor565(pal.panelBg, pal.primary, 48) : pal.panelBg;
-    uint16_t brdCol = selected ? pal.primary : pal.gridDim;
+    int16_t rowW = DisplayManager::kWidth - 12;
+    uint16_t rowBg = selected ? pal.panelBg : pal.bg;
 
-    c.fillRect(3, y, rowW, 20, rowBg);
-    c.drawRect(3, y, rowW, 20, brdCol);
+    c.fillRect(6, y, rowW, 20, rowBg);
     if (selected) {
-        c.fillRect(3, y, 3, 20, pal.primary);
-        c.setTextColor(pal.primary, rowBg);
-        c.setCursor(7, y + 6);
-        c.print(">");
+        c.fillRect(6, y + 2, 2, 16, pal.primary);
     }
 
-    // Clamp label to max 10 chars so it never collides with value column
     char cleanLabel[12];
     std::strncpy(cleanLabel, label, 10);
     cleanLabel[10] = '\0';
 
-    c.setTextColor(selected ? pal.highlight : pal.textMain, rowBg);
-    c.setCursor(selected ? 14 : 8, y + 6);
+    c.setTextColor(selected ? pal.highlight : pal.textDim, rowBg);
+    c.setCursor(14, y + 6);
     c.print(cleanLabel);
 
     if (value && value[0] != '\0') {
@@ -353,8 +304,8 @@ void UIManager::drawMenuRow(int16_t y, const char* label, const char* value, boo
         std::strncpy(cleanVal, value, 9);
         cleanVal[9] = '\0';
         int16_t vw = std::strlen(cleanVal) * 6;
-        int16_t vx = 3 + rowW - 4 - vw;
-        uint16_t vCol = highlightValue ? pal.ok : (selected ? pal.secondary : pal.textDim);
+        int16_t vx = 6 + rowW - 4 - vw;
+        uint16_t vCol = highlightValue ? pal.ok : (selected ? pal.primary : pal.textMain);
         c.setTextColor(vCol, rowBg);
         c.setCursor(vx, y + 6);
         c.print(cleanVal);
@@ -364,11 +315,11 @@ void UIManager::drawMenuRow(int16_t y, const char* label, const char* value, boo
 void UIManager::drawLoadingSpinner(int16_t cx, int16_t cy, int16_t radius, uint16_t col) {
     auto& c = Display.canvas();
     float baseAng = (Anim.nowMs() % 1000) * (6.283185f / 1000.0f);
-    for (int i = 0; i < 6; ++i) {
-        float a = baseAng + i * 0.8f;
+    for (int i = 0; i < 4; ++i) {
+        float a = baseAng + i * 1.57f;
         int16_t x = cx + (int16_t)(std::cos(a) * radius);
         int16_t y = cy + (int16_t)(std::sin(a) * radius);
-        c.fillCircle(x, y, (i == 5) ? 2 : 1, col);
+        c.drawPixel(x, y, col);
     }
 }
 
@@ -379,55 +330,39 @@ void UIManager::renderBootSequence() {
 
     c.fillSprite(pal.bg);
 
-    if (elapsed < 700) {
-        float t = AnimationEngine::easeOutExpo(elapsed / 700.0f);
-        int16_t boxW = (int16_t)(120 * t);
-        int16_t boxX = (DisplayManager::kWidth - boxW) / 2;
-        Display.drawCyberPanel(boxX, 55, max<int16_t>(16, boxW), 68, pal.panelBg, pal.primary, pal.secondary, 6);
+    if (elapsed < 650) {
+        c.setTextColor(pal.primary);
+        c.setTextSize(2);
+        c.setCursor(14, 92);
+        c.print("CYBERDECK");
+        c.setTextSize(1);
+        c.setTextColor(pal.textDim);
+        c.setCursor(24, 118);
+        c.print("TTGO_CyberDeck");
+    } else if (elapsed < 1300) {
+        uint32_t stepMs = elapsed - 650;
+        char line0[22], line1[22], line2[22];
+        snprintf(line0, sizeof(line0), "CPU  %lu MHz", (unsigned long)ESP.getCpuFreqMHz());
+        snprintf(line1, sizeof(line1), "RAM  %lu KB FREE", (unsigned long)(ESP.getFreeHeap() / 1024));
+        snprintf(line2, sizeof(line2), "ROM  %lu MB FLASH", (unsigned long)(ESP.getFlashChipSize() / (1024UL * 1024UL)));
 
-        if (elapsed > 150) {
-            c.setTextColor(pal.primary);
-            c.setTextSize(2);
-            c.setCursor(14, 70);
-            c.print("NEON DECK");
-            c.setTextSize(1);
-            c.setTextColor(pal.secondary);
-            c.setCursor(18, 96);
-            c.print("CYBERDECK OS v1.1");
-        }
-    } else if (elapsed < 1450) {
-        Display.drawCyberPanel(4, 12, 127, 216, pal.panelBg, pal.primary, pal.secondary, 5);
-        c.setTextColor(pal.secondary);
-        c.setCursor(10, 22);
-        c.print("// HW INIT MATRIX");
-        c.drawFastHLine(10, 33, 115, pal.gridDim);
+        c.setTextColor(pal.primary);
+        c.setCursor(16, 66);
+        c.print("TTGO_CyberDeck");
 
-        uint32_t stepMs = elapsed - 700;
-        struct InitLine { uint16_t delayMs; const char* tag; const char* desc; };
-        static const InitLine kLines[] = {
-            {   0, "[OK]", "ESP32 240MHz 2C"  },
-            { 110, "[OK]", "ST7789 135x240"   },
-            { 220, "[OK]", "SPI DMA ENGINE"   },
-            { 330, "[OK]", "802.11 SNIFFER"   },
-            { 440, "[OK]", "CRYPTO SHA-256"   },
-            { 550, "[OK]", "WEB DECK SERVER"  }
-        };
-        for (size_t i = 0; i < 6; ++i) {
-            if (stepMs >= kLines[i].delayMs) {
-                int16_t ly = 42 + i * 22;
-                c.setTextColor(pal.ok);
-                c.setCursor(10, ly);
-                c.print(kLines[i].tag);
-                c.setTextColor(pal.textMain);
-                c.setCursor(38, ly);
-                c.print(kLines[i].desc);
+        const char* lines[3] = { line0, line1, line2 };
+        for (size_t i = 0; i < 3; ++i) {
+            if (stepMs >= i * 140) {
+                c.setTextColor(pal.textDim);
+                c.setCursor(16, 96 + i * 18);
+                c.print(lines[i]);
             }
         }
-        Display.drawProgressBar(12, 195, 111, 10, constrain(stepMs / 700.0f, 0.0f, 1.0f),
-                                pal.primary, pal.secondary, pal.bg);
+        Display.drawProgressBar(16, 168, 103, 3, constrain(stepMs / 600.0f, 0.0f, 1.0f),
+                                pal.primary, pal.gridDim, pal.panelBg);
     } else {
         _state = SystemState::LAUNCHER;
-        _transitionTween.start(32.0f, 0.0f, 200, EasingType::OUT_EXPO);
+        _transitionTween.start(24.0f, 0.0f, 180, EasingType::OUT_EXPO);
         invalidateAll();
         return;
     }
@@ -438,126 +373,72 @@ void UIManager::renderBootSequence() {
 void UIManager::renderLauncher(bool glitchActive) {
     auto& c = Display.canvas();
     const ColorPalette& pal = Settings.palette();
+    uint32_t now = millis();
 
     int16_t slideX = (int16_t)_cardSlideTween.current;
     int16_t transY = (int16_t)_transitionTween.current;
 
     Display.clearBody(pal.bg);
 
-    // Static parallax grid (moves only when sliding cards — zero idle flicker!)
-    int16_t gridShiftX = -(_selectedApp * 6) + (slideX / 2);
-    Display.drawCyberGrid(gridShiftX, 0, pal.gridDim);
-
     const AppMetadata& meta = getAppMeta(_selectedApp);
 
-    // Top deck index banner
-    int16_t bannerY = DisplayManager::kBodyY + 6 + transY;
-    c.setTextColor(glitchActive ? pal.highlight : pal.secondary);
-    c.setCursor(6, bannerY);
-    if (glitchActive) {
-        c.print("// GLITCH_SYNC #");
-    } else {
-        c.print(meta.codeTag);
-    }
+    // Minimalist Central Application Card (clean, uncluttered space)
+    int16_t cardX = 10 + slideX;
+    int16_t cardY = DisplayManager::kBodyY + 26 + transY;
+    int16_t cardW = DisplayManager::kWidth - 20;
+    int16_t cardH = 128;
 
-    char idxBuf[12];
-    snprintf(idxBuf, sizeof(idxBuf), "[%02u/%02u]", (unsigned)(_selectedApp + 1), (unsigned)APP_COUNT);
-    c.setTextColor(pal.textDim);
-    c.setCursor(DisplayManager::kWidth - 46, bannerY);
-    c.print(idxBuf);
+    Display.drawCyberPanel(cardX, cardY, cardW, cardH, pal.panelBg, pal.primary, pal.secondary, 0);
 
-    // Central Cyberpunk Application Card
-    int16_t cardX = 6 + slideX;
-    int16_t cardY = DisplayManager::kBodyY + 20 + transY;
-    int16_t cardW = DisplayManager::kWidth - 12;
-    int16_t cardH = 132;
-
-    Display.drawCyberPanel(cardX, cardY, cardW, cardH, pal.panelBg, pal.primary, pal.secondary, 6);
-
-    // Glowing icon frame inside card
+    // Minimalist App Icon
     int16_t iconCx = cardX + cardW / 2;
-    int16_t iconCy = cardY + 36;
-    Display.drawCyberPanel(iconCx - 23, iconCy - 20, 46, 40, pal.bg, pal.secondary, pal.primary, 4);
-    Display.drawAppIcon(_selectedApp, iconCx, iconCy, pal.primary, pal.secondary, 0);
+    int16_t iconCy = cardY + 40;
+    Display.drawAppIcon(_selectedApp, iconCx, iconCy, pal.primary, pal.secondary, now);
 
-    // App Title with chromatic aberration during glitch bursts
+    // App Title (with subtle chromatic split only during glitch bursts)
     int16_t titleLen = std::strlen(meta.title) * 6;
     int16_t titleX   = cardX + (cardW - titleLen) / 2;
-    int16_t titleY   = cardY + 66;
+    int16_t titleY   = cardY + 76;
     if (glitchActive) {
         c.setTextColor(pal.secondary);
-        c.setCursor(titleX - 2, titleY);
+        c.setCursor(titleX - 1, titleY);
         c.print(meta.title);
         c.setTextColor(pal.danger);
-        c.setCursor(titleX + 2, titleY);
+        c.setCursor(titleX + 1, titleY);
         c.print(meta.title);
     }
     c.setTextColor(pal.highlight);
     c.setCursor(titleX, titleY);
     c.print(meta.title);
 
-    // Decorative divider
-    c.drawFastHLine(cardX + 12, cardY + 80, cardW - 24, pal.gridDim);
-    c.drawFastHLine(cardX + cardW / 2 - 12, cardY + 80, 24, pal.secondary);
-
-    // Subtitle / description
+    // Clean 1-line subtitle
     int16_t subLen = std::strlen(meta.subtitle) * 6;
-    c.setTextColor(pal.textMain);
-    c.setCursor(cardX + max<int16_t>(4, (cardW - subLen) / 2), cardY + 88);
+    c.setTextColor(pal.textDim);
+    c.setCursor(cardX + max<int16_t>(4, (cardW - subLen) / 2), cardY + 96);
     c.print(meta.subtitle);
 
-    // Status strip inside card bottom
-    c.drawFastHLine(cardX + 8, cardY + 104, cardW - 16, pal.gridDim);
-    c.setTextColor(pal.primary);
-    c.setCursor(cardX + 8, cardY + 112);
-    char timeBuf[16];
-    Net.getFormattedTime(timeBuf, sizeof(timeBuf), nullptr, 0);
-    c.print(timeBuf);
-
-    c.setTextColor(Net.isConnected() ? pal.ok : pal.warning);
-    c.setCursor(cardX + cardW - 44, cardY + 112);
-    c.print(Net.isConnected() ? "ONLINE" : "LOCAL");
-
-    // Neighbor App Dock Preview (< PREV | NEXT >)
-    uint8_t prevIdx = (_selectedApp + APP_COUNT - 1) % APP_COUNT;
-    uint8_t nextIdx = (_selectedApp + 1) % APP_COUNT;
-    int16_t dockY   = DisplayManager::kBodyY + 158;
-    Display.drawCyberPanel(6, dockY, DisplayManager::kWidth - 12, 22, pal.panelBg, pal.gridDim, pal.secondary, 3);
-
-    c.setTextColor(pal.textDim);
-    c.setCursor(10, dockY + 7);
-    c.print("<");
-    char navShort[8];
-    std::strncpy(navShort, getAppMeta(prevIdx).title, 6);
-    navShort[6] = '\0';
-    c.print(navShort);
-
-    c.setCursor(65, dockY + 7);
-    c.setTextColor(pal.secondary);
-    c.print("|");
-
-    std::strncpy(navShort, getAppMeta(nextIdx).title, 6);
-    navShort[6] = '\0';
-    int16_t nw = (std::strlen(navShort) + 1) * 6;
-    c.setTextColor(pal.textDim);
-    c.setCursor(DisplayManager::kWidth - 10 - nw, dockY + 7);
-    c.print(navShort);
-    c.print(">");
-
-    // Carousel Pagination Progress Bar
-    int16_t barY = DisplayManager::kBodyY + 186;
+    // Minimalist Pagination Dots at bottom
+    int16_t barY = DisplayManager::kBodyY + 178;
     for (uint8_t i = 0; i < APP_COUNT; ++i) {
-        int16_t bx = 7 + i * 11;
+        int16_t bx = 18 + i * 9;
         if (i == _selectedApp) {
-            c.fillRect(bx, barY, 9, 5, pal.primary);
+            c.fillRect(bx - 1, barY, 6, 3, pal.primary);
         } else {
-            c.fillRect(bx + 1, barY + 1, 7, 3, pal.gridDim);
+            c.fillRect(bx + 1, barY + 1, 2, 2, pal.gridDim);
         }
     }
 
-    // Apply brief horizontal slice glitch only during the controlled glitch window
+    // Soft background scanline texture inside card only
+    if (Settings.get().animIntensity > 0) {
+        Display.drawScanlines(cardY + 2, cardH - 4, (uint8_t)((now / 160) % 3));
+    }
+
+    // Multi-pattern soft glitch effect during active glitch window
     if (glitchActive) {
-        Display.applyGlitchSlices(cardY + 10, cardY + 100, 3, 5, pal.secondary);
+        uint8_t activePat = (Settings.get().animIntensity == 1)
+            ? static_cast<uint8_t>(GLITCH_CLASSIC_SOFT)
+            : _glitchPattern;
+        Display.applyMultiGlitch(cardY + 10, cardY + 110, activePat, now);
     }
 }
 
@@ -680,7 +561,6 @@ void UIManager::updateAndRender() {
 
     uint32_t now = millis();
 
-    // Update header once per second (or every 250ms if FPS overlay is enabled)
     uint32_t hdrInterval = Settings.get().showFpsOverlay ? 250 : 1000;
     if ((now - _lastHeaderTickMs) >= hdrInterval) {
         _lastHeaderTickMs = now;
@@ -688,7 +568,7 @@ void UIManager::updateAndRender() {
     }
 
     if (_headerNeedsRedraw) {
-        const char* headerTitle = "NEON//DECK";
+        const char* headerTitle = "TTGO_CyberDeck";
         if (_state == SystemState::IN_APP) {
             headerTitle = getAppMeta((uint8_t)_activeApp).title;
         }
@@ -696,7 +576,6 @@ void UIManager::updateAndRender() {
         _headerNeedsRedraw = false;
     }
 
-    // Track button hold progress changes for footer bar without redrawing 60x/sec when idle
     bool holdActive = (Buttons.holdProgressA() > 0.01f) || (Buttons.holdProgressB() > 0.01f) ||
                       Buttons.isPressedA() || Buttons.isPressedB();
     if (holdActive || _lastHoldActive) {
@@ -704,32 +583,35 @@ void UIManager::updateAndRender() {
     }
     _lastHoldActive = holdActive;
 
-    // Body & Footer rendering
     if (_state == SystemState::LAUNCHER) {
         bool slideActive = _cardSlideTween.update(Anim.nowUs());
         bool transActive = _transitionTween.update(Anim.nowUs());
 
-        // Controlled cyberpunk glitch burst on Main Screen (every ~3.2s for 130ms)
+        // Multi-pattern soft glitch scheduler
         bool glitchNow = false;
-        if (Settings.get().animIntensity > 0 && !_quickMenuOpen && !_modalActive) {
+        uint8_t intensity = Settings.get().animIntensity;
+        if (intensity > 0 && !_quickMenuOpen && !_modalActive) {
             if (now >= _nextGlitchMs) {
-                _glitchEndMs  = now + 130;
-                _nextGlitchMs = now + 2800 + (esp_random() % 1800);
+                _glitchPattern = (_glitchPattern + 1) % GLITCH_PATTERN_COUNT;
+                _glitchEndMs   = now + 220; // 220ms smooth multi-frame glitch
+                uint32_t gap   = (intensity >= 2) ? (1300 + (esp_random() % 1100)) : (2400 + (esp_random() % 1400));
+                _nextGlitchMs  = now + gap;
             }
             if (now < _glitchEndMs) {
                 glitchNow = true;
             }
         }
 
-        if ((now - _lastLauncherSecMs) >= 1000) {
-            _lastLauncherSecMs = now;
-            _bodyNeedsRedraw = true;
+        // Gentle ambient refresh at ~12 FPS so scan beam & icon animation glide smoothly without strobing
+        uint32_t idleInterval = (intensity > 0) ? 80 : 1000;
+        if ((now - _lastLauncherFxMs) >= idleInterval) {
+            _lastLauncherFxMs = now;
+            _bodyNeedsRedraw  = true;
         }
 
-        if (_bodyNeedsRedraw || slideActive || transActive || glitchNow || _wasGlitching) {
+        if (_bodyNeedsRedraw || slideActive || transActive || glitchNow) {
             renderLauncher(glitchNow);
             _bodyNeedsRedraw = false;
-            _wasGlitching    = glitchNow;
         }
 
         if (_footerNeedsRedraw) {
@@ -749,7 +631,6 @@ void UIManager::updateAndRender() {
         }
     }
 
-    // Overlays
     if (_quickMenuOpen) {
         bool qAnim = _quickMenuTween.active;
         if (_bodyNeedsRedraw || qAnim) {

@@ -4,7 +4,7 @@
 
 DisplayManager Display;
 
-LGFX_NeonDeck::LGFX_NeonDeck() {
+LGFX_TTGO_CyberDeck::LGFX_TTGO_CyberDeck() {
     {
         auto cfg = _bus.config();
         cfg.spi_host    = VSPI_HOST;
@@ -44,7 +44,7 @@ LGFX_NeonDeck::LGFX_NeonDeck() {
         auto cfg = _light.config();
         cfg.pin_bl      = PIN_TFT_BL;
         cfg.invert      = !TFT_BL_ACTIVE_HIGH;
-        cfg.freq        = 25000; // 25 kHz high-frequency PWM eliminates backlight flicker
+        cfg.freq        = TFT_BL_PWM_FREQ; // 25 kHz high-frequency PWM
         cfg.pwm_channel = 7;
         _light.config(cfg);
         _panel.setLight(&_light);
@@ -90,7 +90,6 @@ void DisplayManager::flush() {
     int16_t h = _dirty.height();
 
     if (h > 0) {
-        // Use native swap565_t pointer from LGFX_Sprite for zero-tear, zero-flicker DMA push
         const auto* base = static_cast<const lgfx::swap565_t*>(_canvas.getBuffer());
         _tft.startWrite();
         _tft.pushImageDMA(0, y, kWidth, h, base + (y * kWidth));
@@ -119,40 +118,127 @@ void DisplayManager::drawCyberGrid(int16_t shiftX, int16_t shiftY, uint16_t grid
 }
 
 void DisplayManager::drawScanlines(int16_t yStart, int16_t h, uint8_t phase) {
-    // Moving scanlines over text caused visible screen strobing/flicker on ST7789;
-    // intentionally kept no-op so panels and typography stay rock-solid.
-    (void)yStart;
-    (void)h;
-    (void)phase;
+    if (!_spriteReady || Settings.get().animIntensity == 0) return;
+    // Soft CRT scanline texture: subtly tint every 3rd row ONLY where background/panel pixels exist
+    // so bright text and icons NEVER flicker or strobe!
+    const ColorPalette& pal = Settings.palette();
+    uint16_t tintBg    = AnimationEngine::lerpColor565(pal.bg, 0x0000, 65);
+    uint16_t tintPanel = AnimationEngine::lerpColor565(pal.panelBg, pal.gridDim, 55);
+
+    int16_t offset = phase % 3;
+    for (int16_t y = yStart + offset; y < yStart + h && y < kHeight; y += 3) {
+        for (int16_t x = 2; x < kWidth - 2; x += 2) {
+            uint16_t px = _canvas.readPixel(x, y);
+            if (px == pal.panelBg) {
+                _canvas.drawPixel(x, y, tintPanel);
+            } else if (px == pal.bg) {
+                _canvas.drawPixel(x, y, tintBg);
+            }
+        }
+    }
 }
 
 void DisplayManager::drawSubtleNoise(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color, uint8_t count) {
-    (void)x; (void)y; (void)w; (void)h; (void)color; (void)count;
+    if (Settings.get().animIntensity == 0) return;
+    const ColorPalette& pal = Settings.palette();
+    uint16_t softSpark = AnimationEngine::lerpColor565(pal.panelBg, color, 85);
+    uint32_t seed = (Anim.nowMs() / 120) * 1664525UL + 1013904223UL;
+    for (uint8_t i = 0; i < count; ++i) {
+        seed = seed * 1664525UL + 1013904223UL;
+        int16_t px = x + ((seed >> 16) % max<int16_t>(1, w));
+        seed = seed * 1664525UL + 1013904223UL;
+        int16_t py = y + ((seed >> 16) % max<int16_t>(1, h));
+        uint16_t cur = _canvas.readPixel(px, py);
+        if (cur == pal.bg || cur == pal.panelBg) {
+            _canvas.drawPixel(px, py, softSpark);
+        }
+    }
 }
 
-void DisplayManager::applyGlitchSlices(int16_t yMin, int16_t yMax, uint8_t sliceCount, int16_t maxShiftPx, uint16_t accentCol) {
-    if (!_spriteReady || Settings.get().animIntensity == 0) return;
-    auto* buf = static_cast<uint16_t*>(_canvas.getBuffer());
-    uint32_t seed = (Anim.nowMs() / 35) * 2654435761UL;
+void DisplayManager::drawSoftScanBeam(int16_t x, int16_t y, int16_t w, int16_t h, uint32_t animMs, uint16_t glowCol) {
+    if (Settings.get().animIntensity == 0 || h <= 8) return;
+    const ColorPalette& pal = Settings.palette();
+    int16_t beamY = y + 3 + ((animMs / 28) % (h - 6));
+    uint16_t softGlow1 = AnimationEngine::lerpColor565(pal.panelBg, glowCol, 65);
+    uint16_t softGlow2 = AnimationEngine::lerpColor565(pal.panelBg, glowCol, 32);
 
-    for (uint8_t s = 0; s < sliceCount; ++s) {
-        seed = seed * 1664525UL + 1013904223UL;
-        int16_t sy = yMin + ((seed >> 16) % max<int16_t>(4, (yMax - yMin - 6)));
-        int16_t sh = 2 + ((seed >> 12) & 0x03); // 2..5 px slice height
-        int16_t shift = (int16_t)((seed >> 8) % (maxShiftPx * 2 + 1)) - maxShiftPx;
-        if (shift == 0) shift = 3;
-
-        for (int16_t row = sy; row < sy + sh && row < kHeight; ++row) {
-            uint16_t* line = buf + row * kWidth;
-            if (shift > 0) {
-                std::memmove(line + shift, line, (kWidth - shift) * sizeof(uint16_t));
-            } else if (shift < 0) {
-                int16_t absShift = -shift;
-                std::memmove(line, line + absShift, (kWidth - absShift) * sizeof(uint16_t));
-            }
+    for (int16_t dx = x + 3; dx < x + w - 3; ++dx) {
+        if (_canvas.readPixel(dx, beamY) == pal.panelBg) {
+            _canvas.drawPixel(dx, beamY, softGlow1);
         }
-        // Subtle cyber artifact line
-        _canvas.drawFastHLine(10, sy, 28, accentCol);
+        if (beamY > y + 2 && _canvas.readPixel(dx, beamY - 1) == pal.panelBg) {
+            _canvas.drawPixel(dx, beamY - 1, softGlow2);
+        }
+    }
+}
+
+void DisplayManager::applyMultiGlitch(int16_t yMin, int16_t yMax, uint8_t pattern, uint32_t animMs) {
+    if (!_spriteReady || Settings.get().animIntensity == 0) return;
+    const ColorPalette& pal = Settings.palette();
+    auto* buf = static_cast<uint16_t*>(_canvas.getBuffer());
+    uint32_t seed = (animMs / 55) * 2654435761UL;
+
+    uint8_t pat = pattern % GLITCH_PATTERN_COUNT;
+
+    switch (pat) {
+        case GLITCH_RGB_SPLIT: {
+            // Pattern 0: Soft RGB Chromatic Split + twin micro-slices
+            for (uint8_t s = 0; s < 2; ++s) {
+                seed = seed * 1664525UL + 1013904223UL;
+                int16_t sy = yMin + ((seed >> 16) % max<int16_t>(6, (yMax - yMin - 8)));
+                int16_t shift = (s == 0) ? 2 : -2;
+                for (int16_t r = sy; r < sy + 3 && r < kHeight; ++r) {
+                    uint16_t* line = buf + r * kWidth;
+                    if (shift > 0) std::memmove(line + shift, line, (kWidth - shift) * sizeof(uint16_t));
+                    else std::memmove(line, line - shift, (kWidth + shift) * sizeof(uint16_t));
+                }
+                _canvas.drawFastHLine(12, sy, 22, (s == 0) ? pal.secondary : pal.danger);
+            }
+            break;
+        }
+        case GLITCH_WAVE_SLICE: {
+            // Pattern 1: Smooth Sine Wave Horizontal Ripple across the icon/title area
+            int16_t waveCenter = (yMin + yMax) / 2;
+            for (int16_t r = waveCenter - 12; r <= waveCenter + 12; r += 2) {
+                if (r < yMin || r >= yMax || r >= kHeight) continue;
+                int16_t shift = (int16_t)(std::sin((r * 0.35f) + (animMs * 0.02f)) * 2.5f);
+                uint16_t* line = buf + r * kWidth;
+                if (shift > 0) std::memmove(line + shift, line, (kWidth - shift) * sizeof(uint16_t));
+                else if (shift < 0) std::memmove(line, line - shift, (kWidth + shift) * sizeof(uint16_t));
+            }
+            break;
+        }
+        case GLITCH_SCAN_BEAM: {
+            // Pattern 2: Double Cyber Laser Sync Bars with phosphor trail
+            int16_t by1 = yMin + ((animMs / 12) % max<int16_t>(8, yMax - yMin));
+            uint16_t barCol = AnimationEngine::lerpColor565(pal.panelBg, pal.secondary, 110);
+            _canvas.drawFastHLine(10, by1, kWidth - 20, barCol);
+            _canvas.drawFastHLine(18, by1 + 2, kWidth - 36, AnimationEngine::lerpColor565(pal.panelBg, pal.primary, 90));
+            break;
+        }
+        case GLITCH_HOLO_NOISE: {
+            // Pattern 3: Holographic Data Burst (dashed binary telemetry lines + soft slice)
+            seed = seed * 1664525UL + 1013904223UL;
+            int16_t sy = yMin + ((seed >> 16) % max<int16_t>(8, yMax - yMin - 10));
+            uint16_t dashCol = AnimationEngine::lerpColor565(pal.panelBg, pal.highlight, 120);
+            for (int16_t x = 12; x < kWidth - 14; x += 6) {
+                if (((x + (seed & 0xF)) & 4) == 0) {
+                    _canvas.drawFastHLine(x, sy, 4, dashCol);
+                }
+            }
+            uint16_t* line = buf + (sy + 1) * kWidth;
+            std::memmove(line + 2, line, (kWidth - 2) * sizeof(uint16_t));
+            break;
+        }
+        case GLITCH_CLASSIC_SOFT: {
+            // Pattern 4: Softened Classic Glitch (gentle scanlines + subtle noise + 2px jitter)
+            drawScanlines(yMin, yMax - yMin, (uint8_t)((animMs / 90) % 3));
+            drawSubtleNoise(10, yMin, kWidth - 20, yMax - yMin, pal.secondary, 8);
+            int16_t sy = yMin + 14 + ((seed >> 15) % max<int16_t>(6, yMax - yMin - 20));
+            uint16_t* line = buf + sy * kWidth;
+            std::memmove(line + 2, line, (kWidth - 2) * sizeof(uint16_t));
+            break;
+        }
     }
 }
 
@@ -171,45 +257,29 @@ void DisplayManager::drawScrollbar(int16_t yTop, int16_t height, uint8_t totalIt
 void DisplayManager::drawCyberPanel(int16_t x, int16_t y, int16_t w, int16_t h,
                                     uint16_t fillCol, uint16_t borderCol, uint16_t cornerCol,
                                     uint8_t cut) {
+    (void)cut;
     if (w <= 2 || h <= 2) return;
-    _canvas.fillRect(x + 1, y + 1, w - 2, h - 2, fillCol);
-
-    // Outer chamfered border
-    _canvas.drawFastHLine(x + cut, y, w - cut * 2, borderCol);
-    _canvas.drawFastHLine(x + cut, y + h - 1, w - cut * 2, borderCol);
-    _canvas.drawFastVLine(x, y + cut, h - cut * 2, borderCol);
-    _canvas.drawFastVLine(x + w - 1, y + cut, h - cut * 2, borderCol);
-
-    // Diagonal chamfers
-    _canvas.drawLine(x, y + cut, x + cut, y, borderCol);
-    _canvas.drawLine(x + w - 1 - cut, y, x + w - 1, y + cut, borderCol);
-    _canvas.drawLine(x, y + h - 1 - cut, x + cut, y + h - 1, borderCol);
-    _canvas.drawLine(x + w - 1 - cut, y + h - 1, x + w - 1, y + h - 1 - cut, borderCol);
-
-    // Glowing corner brackets
-    int16_t brk = min<int16_t>(10, w / 4);
-    _canvas.drawFastHLine(x + cut, y, brk, cornerCol);
-    _canvas.drawFastHLine(x + w - cut - brk, y + h - 1, brk, cornerCol);
+    _canvas.fillRect(x, y, w, h, fillCol);
+    // Minimalist top accent bar + tiny corner ticks
+    _canvas.drawFastHLine(x, y, w, borderCol);
+    _canvas.drawFastHLine(x, y + h - 1, w, Settings.palette().gridDim);
+    _canvas.fillRect(x, y, 3, 2, cornerCol);
+    _canvas.fillRect(x + w - 3, y, 3, 2, cornerCol);
 }
 
 void DisplayManager::drawProgressBar(int16_t x, int16_t y, int16_t w, int16_t h,
                                      float ratio01, uint16_t fillCol, uint16_t borderCol, uint16_t bgCol) {
+    (void)borderCol;
     ratio01 = constrain(ratio01, 0.0f, 1.0f);
     _canvas.fillRect(x, y, w, h, bgCol);
-    _canvas.drawRect(x, y, w, h, borderCol);
-    int16_t innerW = w - 4;
-    int16_t fillW  = (int16_t)(innerW * ratio01);
+    int16_t fillW = (int16_t)(w * ratio01);
     if (fillW > 0) {
-        _canvas.fillRect(x + 2, y + 2, fillW, h - 4, fillCol);
-        for (int16_t sx = x + 6; sx < x + 2 + fillW; sx += 5) {
-            _canvas.drawFastVLine(sx, y + 2, h - 4, bgCol);
-        }
+        _canvas.fillRect(x, y, fillW, h, fillCol);
     }
 }
 
 void DisplayManager::drawAppIcon(uint8_t appIndex, int16_t cx, int16_t cy,
                                  uint16_t primaryCol, uint16_t secondaryCol, uint32_t animMs) {
-    (void)animMs;
     switch (appIndex) {
         case 0: { // SYSTEM — Dual-Core MCU
             _canvas.drawRect(cx - 8, cy - 8, 17, 17, primaryCol);
@@ -226,16 +296,18 @@ void DisplayManager::drawAppIcon(uint8_t appIndex, int16_t cx, int16_t cy,
         case 1: { // WIFI RADAR — Radar sweep
             _canvas.drawCircle(cx, cy, 11, secondaryCol);
             _canvas.drawCircle(cx, cy, 6, secondaryCol);
-            _canvas.drawLine(cx, cy, cx + 8, cy - 7, primaryCol);
-            _canvas.fillCircle(cx + 5, cy - 4, 2, primaryCol);
+            float ang = (animMs % 2400) * (6.283185f / 2400.0f);
+            int16_t rx = cx + (int16_t)(std::cos(ang) * 9.0f);
+            int16_t ry = cy + (int16_t)(std::sin(ang) * 9.0f);
+            _canvas.drawLine(cx, cy, rx, ry, primaryCol);
             _canvas.fillCircle(cx, cy, 2, primaryCol);
             break;
         }
-        case 2: { // PKT SNIFFER — Spectrum analyzer bars + waveform
-            int16_t heights[7] = {5, 11, 16, 9, 18, 13, 7};
+        case 2: { // PKT SNIFFER — Spectrum analyzer bars
+            int16_t heights[7] = {6, 12, 16, 10, 18, 13, 8};
             for (int i = 0; i < 7; ++i) {
                 int16_t bx = cx - 10 + i * 3;
-                int16_t bh = heights[i];
+                int16_t bh = heights[i] - ((animMs / 180 + i) % 4);
                 uint16_t col = (i == 2 || i == 4) ? primaryCol : secondaryCol;
                 _canvas.fillRect(bx, cy + 9 - bh, 2, bh, col);
             }
@@ -270,12 +342,14 @@ void DisplayManager::drawAppIcon(uint8_t appIndex, int16_t cx, int16_t cy,
             _canvas.drawFastHLine(cx - 11, cy - 5, 22, secondaryCol);
             _canvas.drawLine(cx - 7, cy - 1, cx - 3, cy + 2, primaryCol);
             _canvas.drawLine(cx - 7, cy + 5, cx - 3, cy + 2, primaryCol);
-            _canvas.fillRect(cx, cy + 4, 6, 2, primaryCol);
+            if ((animMs / 400) % 2 == 0) {
+                _canvas.fillRect(cx, cy + 4, 6, 2, primaryCol);
+            }
             break;
         }
         case 7: { // MATRIX — Cascading digital rain
             for (int i = -8; i <= 8; i += 4) {
-                int16_t drop = ((i + 8) * 2) % 12;
+                int16_t drop = ((animMs / 110) + (i + 8) * 2) % 12;
                 _canvas.drawFastVLine(cx + i, cy - 8, 16, secondaryCol);
                 _canvas.fillRect(cx + i - 1, cy - 6 + drop, 3, 3, primaryCol);
             }

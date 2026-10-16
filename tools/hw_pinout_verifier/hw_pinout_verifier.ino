@@ -1,5 +1,5 @@
 // ============================================================================
-// NEON DECK — Minimal Display & Two-Button Hardware Verifier
+// TTGO_CyberDeck — Minimal Display & Two-Button Hardware Verifier
 // ============================================================================
 // Purpose: Standalone minimal diagnostic test to verify ST7789 SPI pins,
 // backlight polarity, CGRAM offsets, and GPIO 0 / GPIO 35 buttons on a

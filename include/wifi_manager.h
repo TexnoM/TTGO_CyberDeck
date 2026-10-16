@@ -93,8 +93,9 @@ public:
     const PingResult& pingStats() const { return _ping; }
     void resetPingStats();
 
-    // Real-time Clock & NTP Synchronization
+    // Real-time Clock & Wi-Fi / NTP Synchronization (no fake fallback dates)
     bool isNtpSynced() const { return _ntpSynced; }
+    void setWifiEpoch(uint32_t unixEpochUtc);
     uint32_t currentEpoch() const;
     void getFormattedTime(char* hmsOut, size_t hmsLen, char* dateOut, size_t dateLen) const;
 
@@ -107,7 +108,7 @@ private:
     WebServer _server{80};
     bool      _apPortalActive    = false;
     bool      _webServerRunning  = false;
-    char      _apSsid[24]        = "NEON-DECK-SETUP";
+    char      _apSsid[24]        = "TTGO_CyberDeck";
     uint32_t  _webRequests       = 0;
     char      _lastRemoteCmd[24] = "NONE";
     uint32_t  _connAttemptStart  = 0;
@@ -130,10 +131,10 @@ private:
     uint32_t   _lastPingTrigger  = 0;
     char       _pingTarget[48]   = {0};
 
-    // NTP & Time state
+    // NTP & Wi-Fi Time state
     bool     _ntpSynced          = false;
     bool     _ntpConfigured      = false;
-    uint32_t _bootEpochBase      = 1735689600UL;
+    uint32_t _bootEpochBase      = 0;
     uint32_t _bootMillisAtBase   = 0;
     uint32_t _lastNtpCheckMs     = 0;
     uint32_t _lastEpochSaveMs    = 0;

@@ -61,14 +61,14 @@ private:
     SystemState _state             = SystemState::BOOT_SEQUENCE;
     uint32_t    _bootStartMs       = 0;
 
-    // Launcher state & controlled glitch timing
+    // Launcher state & multi-glitch engine
     uint8_t     _selectedApp       = 0;
     TweenValue  _cardSlideTween;
     TweenValue  _transitionTween;
-    uint32_t    _nextGlitchMs      = 2800;
+    uint32_t    _nextGlitchMs      = 1500;
     uint32_t    _glitchEndMs       = 0;
-    bool        _wasGlitching      = false;
-    uint32_t    _lastLauncherSecMs = 0;
+    uint8_t     _glitchPattern     = 0;
+    uint32_t    _lastLauncherFxMs  = 0;
 
     // Active app
     AppId       _activeApp         = APP_SYSTEM;
@@ -91,7 +91,7 @@ private:
     uint16_t    _toastCol          = 0;
     uint32_t    _toastEndMs        = 0;
 
-    // Dirty tracking flags (prevents unnecessary 60Hz full-screen redraws!)
+    // Dirty tracking flags
     bool        _headerNeedsRedraw = true;
     bool        _bodyNeedsRedraw   = true;
     bool        _footerNeedsRedraw = true;

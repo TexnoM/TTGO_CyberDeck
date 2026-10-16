@@ -83,10 +83,10 @@ void SettingsManager::applyDefaults() {
     _settings.matrixSpeed     = 3;
     _settings.matrixDensity   = 3;
     _settings.starfieldSpeed  = 3;
-    _settings.timezoneHours   = 2; // UTC+2 default
+    _settings.timezoneHours   = 3; // UTC+3 default
     std::strncpy(_settings.pingHost, "192.168.1.1", sizeof(_settings.pingHost) - 1);
     _settings.pingHost[sizeof(_settings.pingHost) - 1] = '\0';
-    _settings.lastSavedEpoch  = 1735689600UL; // 2025-01-01 00:00:00 fallback
+    _settings.lastSavedEpoch  = 0; // 0 = unsynchronized (no fake hardcoded date!)
 }
 
 void SettingsManager::begin() {

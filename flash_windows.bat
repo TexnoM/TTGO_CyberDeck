@@ -1,12 +1,12 @@
 @echo off
 REM ============================================================================
-REM NEON DECK — Windows One-Click Build, Flash & Recovery Helper
+REM TTGO_CyberDeck — Windows One-Click Build, Flash & Recovery Helper
 REM Target: LilyGO TTGO T-Display 1.14" ESP32 Clone
 REM ============================================================================
-title NEON DECK // Firmware Flasher for Windows
+title TTGO_CyberDeck // Firmware Flasher for Windows
 
 echo ============================================================
-echo   NEON DECK — POCKET CYBERDECK FIRMWARE (ESP32 T-DISPLAY)
+echo   TTGO_CyberDeck — POCKET CYBERDECK FIRMWARE (ESP32)
 echo ============================================================
 echo.
 echo   [1] Build and Flash Standard Clone (Variant A - Default)

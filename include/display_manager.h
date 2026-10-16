@@ -6,13 +6,22 @@
 #include "animation_engine.h"
 #include "settings_manager.h"
 
-class LGFX_NeonDeck : public lgfx::LGFX_Device {
+class LGFX_TTGO_CyberDeck : public lgfx::LGFX_Device {
     lgfx::Panel_ST7789 _panel;
     lgfx::Bus_SPI      _bus;
     lgfx::Light_PWM    _light;
 
 public:
-    LGFX_NeonDeck();
+    LGFX_TTGO_CyberDeck();
+};
+
+enum GlitchPattern : uint8_t {
+    GLITCH_RGB_SPLIT = 0,
+    GLITCH_WAVE_SLICE = 1,
+    GLITCH_SCAN_BEAM = 2,
+    GLITCH_HOLO_NOISE = 3,
+    GLITCH_CLASSIC_SOFT = 4,
+    GLITCH_PATTERN_COUNT = 5
 };
 
 class DisplayManager {
@@ -30,7 +39,7 @@ public:
     void setRotation(uint8_t rotation);
 
     LGFX_Sprite& canvas() { return _canvas; }
-    LGFX_NeonDeck& tft() { return _tft; }
+    LGFX_TTGO_CyberDeck& tft() { return _tft; }
 
     // Dirty-region tracking & flicker-free SPI push
     void markDirty(int16_t x, int16_t y, int16_t w, int16_t h);
@@ -46,11 +55,16 @@ public:
     // Reusable Cyberpunk Graphics Primitives
     void clearBody(uint16_t bgColor);
     void drawCyberGrid(int16_t shiftX, int16_t shiftY, uint16_t gridColor);
+
+    // Softened scanlines & subtle digital dust (affects only background/midtones, never strobes bright text)
     void drawScanlines(int16_t yStart, int16_t h, uint8_t phase);
     void drawSubtleNoise(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color, uint8_t count);
 
-    // Subtle horizontal slice glitch effect (copies & shifts horizontal strips within canvas)
-    void applyGlitchSlices(int16_t yMin, int16_t yMax, uint8_t sliceCount, int16_t maxShiftPx, uint16_t accentCol);
+    // Multi-style soft cyberpunk glitch engine (5 distinct glitch patterns)
+    void applyMultiGlitch(int16_t yMin, int16_t yMax, uint8_t pattern, uint32_t animMs);
+
+    // Soft moving scanner beam across a card/panel
+    void drawSoftScanBeam(int16_t x, int16_t y, int16_t w, int16_t h, uint32_t animMs, uint16_t glowCol);
 
     // Vertical scrollbar for menus and lists
     void drawScrollbar(int16_t yTop, int16_t height, uint8_t totalItems, uint8_t visibleItems, uint8_t currentIndex);
@@ -68,10 +82,10 @@ public:
     void drawAppIcon(uint8_t appIndex, int16_t cx, int16_t cy, uint16_t primaryCol, uint16_t secondaryCol, uint32_t animMs);
 
 private:
-    LGFX_NeonDeck _tft;
-    LGFX_Sprite   _canvas{&_tft};
-    DirtyRegion   _dirty;
-    bool          _spriteReady = false;
+    LGFX_TTGO_CyberDeck _tft;
+    LGFX_Sprite         _canvas{&_tft};
+    DirtyRegion         _dirty;
+    bool                _spriteReady = false;
 };
 
 extern DisplayManager Display;

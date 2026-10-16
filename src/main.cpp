@@ -15,7 +15,7 @@ void setup() {
 #if HW_SERIAL_DIAGNOSTICS
     Serial.println();
     Serial.println("====================================================");
-    Serial.println("  NEON DECK // POCKET CYBERDECK FIRMWARE (" NEON_DECK_VERSION ")");
+    Serial.println("  TTGO_CyberDeck // POCKET CYBERDECK FW (" TTGO_CYBERDECK_VERSION ")");
     Serial.println("====================================================");
     Serial.printf("  MCU         : %s Rev %d (%lu MHz)\n",
                   ESP.getChipModel(), ESP.getChipRevision(), (unsigned long)ESP.getCpuFreqMHz());
@@ -50,12 +50,11 @@ void setup() {
     // 5. Initialize Wi-Fi, NTP & optional battery voltage sensing
     Net.begin();
 
-    // 6. Start NEON DECK UI & Boot Sequence
+    // 6. Start TTGO_CyberDeck UI & Boot Sequence
     UI.begin();
 }
 
 void loop() {
-    // Non-blocking input & network service ticks
     Buttons.update();
     ButtonEvent ev;
     while ((ev = Buttons.pollEvent()) != ButtonEvent::NONE) {
@@ -64,14 +63,12 @@ void loop() {
 
     Net.update();
 
-    // High-resolution frame-paced rendering
     if (Anim.shouldRenderFrame()) {
         uint32_t renderStartUs = (uint32_t)esp_timer_get_time();
         UI.updateAndRender();
         uint32_t renderDurationUs = (uint32_t)esp_timer_get_time() - renderStartUs;
         Anim.endFrame(renderDurationUs);
     } else {
-        // Yield briefly to FreeRTOS idle/Wi-Fi tasks without stalling button polling
         delay(1);
     }
 }
