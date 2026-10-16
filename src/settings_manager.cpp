@@ -88,6 +88,7 @@ void SettingsManager::applyDefaults() {
     std::strncpy(_settings.pingHost, "192.168.1.1", sizeof(_settings.pingHost) - 1);
     _settings.pingHost[sizeof(_settings.pingHost) - 1] = '\0';
     _settings.lastSavedEpoch  = 0; // 0 = unsynchronized (no fake hardcoded date!)
+    _settings.language        = 1; // 1 = UA by default, 0 = EN
 }
 
 #include <LittleFS.h>
@@ -163,6 +164,7 @@ bool SettingsManager::loadFromLittleFS() {
     if (extractJsonInt(json, "strSpd", intVal)) _settings.starfieldSpeed = (uint8_t)constrain(intVal, 1, 5);
     if (extractJsonInt(json, "tzHrs", intVal)) _settings.timezoneHours = (int8_t)constrain(intVal, -12, 14);
     if (extractJsonInt(json, "sleepTo", intVal)) _settings.sleepTimeoutSec = (uint8_t)constrain(intVal, 0, 120);
+    if (extractJsonInt(json, "lang", intVal)) _settings.language = (uint8_t)(intVal & 1);
 
     char hostBuf[48];
     if (extractJsonString(json, "pingHost", hostBuf, sizeof(hostBuf))) {
@@ -196,6 +198,7 @@ bool SettingsManager::saveToLittleFS() {
     json += "  \"strSpd\": " + String(_settings.starfieldSpeed) + ",\n";
     json += "  \"tzHrs\": " + String(_settings.timezoneHours) + ",\n";
     json += "  \"sleepTo\": " + String(_settings.sleepTimeoutSec) + ",\n";
+    json += "  \"lang\": " + String(_settings.language) + ",\n";
     json += "  \"pingHost\": \"" + String(_settings.pingHost) + "\",\n";
     json += "  \"epoch\": " + String(_settings.lastSavedEpoch) + "\n";
     json += "}\n";
@@ -244,6 +247,7 @@ void SettingsManager::load() {
                 _settings.pingHost[sizeof(_settings.pingHost) - 1] = '\0';
             }
             _settings.lastSavedEpoch  = _prefs.getUInt("epoch", _settings.lastSavedEpoch);
+            _settings.language        = _prefs.getUChar("lang", _settings.language);
         }
         _prefs.end();
     }
@@ -279,6 +283,7 @@ void SettingsManager::forceSave() {
         _prefs.putChar("tzHrs", _settings.timezoneHours);
         _prefs.putString("pingHost", _settings.pingHost);
         _prefs.putUInt("epoch", _settings.lastSavedEpoch);
+        _prefs.putUChar("lang", _settings.language);
         _prefs.end();
     }
     _dirty = false;

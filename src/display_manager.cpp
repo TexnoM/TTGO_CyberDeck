@@ -40,24 +40,23 @@ LGFX_TTGO_CyberDeck::LGFX_TTGO_CyberDeck() {
         cfg.bus_shared       = false;
         _panel.config(cfg);
     }
-    {
-        auto cfg = _light.config();
-        cfg.pin_bl      = PIN_TFT_BL;
-        cfg.invert      = !TFT_BL_ACTIVE_HIGH;
-        cfg.freq        = TFT_BL_PWM_FREQ; // 25 kHz high-frequency PWM
-        cfg.pwm_channel = 7;
-        _light.config(cfg);
-        _panel.setLight(&_light);
-    }
     setPanel(&_panel);
 }
+
+#include <U8g2lib.h>
+
+// High quality cyrillic + latin unicode font (6x12 px bitmap)
+static lgfx::U8g2font s_u8g2_cyrillic(u8g2_font_6x12_t_cyrillic);
 
 bool DisplayManager::begin() {
     _tft.init();
     _tft.initDMA();
     _tft.setRotation(Settings.get().displayRotation);
-    _tft.setBrightness(Settings.get().brightness);
     _tft.fillScreen(TFT_BLACK);
+
+    // Direct hardware LEDC PWM control (ESP32 Arduino core 3.x API)
+    ledcAttach(PIN_TFT_BL, TFT_BL_PWM_FREQ, TFT_BL_PWM_BITS);
+    setBrightness(Settings.get().brightness);
 
     _canvas.setColorDepth(16);
     void* buf = _canvas.createSprite(kWidth, kHeight);
@@ -65,13 +64,26 @@ bool DisplayManager::begin() {
     if (_spriteReady) {
         _canvas.fillSprite(TFT_BLACK);
         _canvas.setTextWrap(false);
+        resetFont();
     }
     markAllDirty();
     return _spriteReady;
 }
 
+void DisplayManager::resetFont() {
+    if (!_spriteReady) return;
+    _canvas.setFont(&s_u8g2_cyrillic);
+    _canvas.setTextSize(1);
+}
+
+void DisplayManager::setClockFont() {
+    if (!_spriteReady) return;
+    _canvas.setFont(&fonts::Font4);
+    _canvas.setTextSize(2);
+}
+
 void DisplayManager::setBrightness(uint8_t brightness) {
-    _tft.setBrightness(brightness);
+    ledcWrite(PIN_TFT_BL, brightness);
 }
 
 void DisplayManager::setRotation(uint8_t rotation) {

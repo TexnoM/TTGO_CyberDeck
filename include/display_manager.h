@@ -9,7 +9,6 @@
 class LGFX_TTGO_CyberDeck : public lgfx::LGFX_Device {
     lgfx::Panel_ST7789 _panel;
     lgfx::Bus_SPI      _bus;
-    lgfx::Light_PWM    _light;
 
 public:
     LGFX_TTGO_CyberDeck();
@@ -37,6 +36,8 @@ public:
     bool begin();
     void setBrightness(uint8_t brightness);
     void setRotation(uint8_t rotation);
+    void resetFont();
+    void setClockFont();
 
     LGFX_Sprite& canvas() { return _canvas; }
     LGFX_TTGO_CyberDeck& tft() { return _tft; }

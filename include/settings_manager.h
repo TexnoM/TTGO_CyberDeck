@@ -42,6 +42,7 @@ struct SystemSettings {
     uint8_t  sleepTimeoutSec;  // 0 = OFF, 10, 20 (default), 30, 60
     char     pingHost[48];     // Configurable host/IP for Network Tools ping test
     uint32_t lastSavedEpoch;   // Last valid epoch timestamp
+    uint8_t  language;         // 0 = EN, 1 = UA
 };
 
 class SettingsManager {

@@ -108,9 +108,13 @@
 #define TFT_SPI_FREQ_HZ     40000000
 #endif
 
-// Backlight PWM Configuration (25 kHz high-freq PWM for zero flicker)
+// Backlight PWM Configuration (2 kHz hardware LEDC PWM for reliable dimming)
 #ifndef TFT_BL_PWM_FREQ
-#define TFT_BL_PWM_FREQ     25000
+#define TFT_BL_PWM_FREQ     2000
+#endif
+
+#ifndef TFT_BL_PWM_CHANNEL
+#define TFT_BL_PWM_CHANNEL  0
 #endif
 
 #ifndef TFT_BL_PWM_BITS

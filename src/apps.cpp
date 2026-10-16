@@ -1235,7 +1235,7 @@ public:
 // 11. SETTINGS & HARDWARE CONFIGURATION APPLICATION (MINIMALIST)
 // ============================================================================
 class AppSettings : public CyberApp {
-    static constexpr uint8_t kItemCount = 11;
+    static constexpr uint8_t kItemCount = 12;
     uint8_t _selIdx  = 0;
     bool    _infoBox = false;
     bool    _dirty   = true;
@@ -1246,8 +1246,14 @@ public:
         _dirty   = true;
     }
 
-    const char* hintA() const override { return _infoBox ? "BACK" : "NEXT"; }
-    const char* hintB() const override { return _infoBox ? "CLOSE" : "CHANGE"; }
+    const char* hintA() const override {
+        bool ua = (Settings.get().language == 1);
+        return _infoBox ? (ua ? "НАЗАД" : "BACK") : (ua ? "ДАЛІ" : "NEXT");
+    }
+    const char* hintB() const override {
+        bool ua = (Settings.get().language == 1);
+        return _infoBox ? (ua ? "ЗАКРИТИ" : "CLOSE") : (ua ? "ЗМІНИТИ" : "CHANGE");
+    }
 
     void handleInput(ButtonEvent ev) override {
         _dirty = true;
@@ -1262,6 +1268,7 @@ public:
             _selIdx = (_selIdx + 1) % kItemCount;
         } else if (ev == ButtonEvent::B_SHORT) {
             SystemSettings& s = Settings.get();
+            bool ua = (s.language == 1);
             switch (_selIdx) {
                 case 0: // THEME
                     s.themeId = (s.themeId + 1) % THEME_COUNT;
@@ -1282,15 +1289,21 @@ public:
                     else s.sleepTimeoutSec = 20;
                     Settings.markDirty();
                     break;
-                case 3: // GLITCH FX
+                case 3: // LANGUAGE (EN / UA)
+                    s.language = (s.language == 0) ? 1 : 0;
+                    Settings.markDirty();
+                    UI.showToast(s.language == 1 ? "МОВА: UA" : "LANG: EN", Settings.palette().ok, 1200);
+                    UI.invalidateAll();
+                    break;
+                case 4: // GLITCH FX
                     s.animIntensity = (s.animIntensity + 1) % 3;
                     Settings.markDirty();
                     break;
-                case 4: // UI SPEED
+                case 5: // UI SPEED
                     s.animSpeed = (s.animSpeed + 1) % 3;
                     Settings.markDirty();
                     break;
-                case 5: // FPS CAP
+                case 6: // FPS CAP
                     if (s.targetFps == 30) s.targetFps = 60;
                     else if (s.targetFps == 60) s.targetFps = 90;
                     else if (s.targetFps == 90) s.targetFps = 120;
@@ -1298,35 +1311,39 @@ public:
                     Anim.setTargetFps(s.targetFps);
                     Settings.markDirty();
                     break;
-                case 6: // SOUND FX
+                case 7: // SOUND FX
                     s.soundEnabled = !s.soundEnabled;
                     Settings.markDirty();
                     break;
-                case 7: // WIFI AP
+                case 8: // WIFI AP
                     if (Net.isConfigPortalActive()) {
                         Net.stopConfigPortal();
-                        UI.showToast("AP OFF", Settings.palette().warning);
+                        UI.showToast(ua ? "ТОЧКУ ВИМК" : "AP OFF", Settings.palette().warning);
                     } else {
                         Net.startConfigPortal();
                         UI.showToast("AP: 192.168.4.1", Settings.palette().ok, 2000);
                     }
                     break;
-                case 8: // WIFI RESET
-                    UI.showConfirmModal("WIPE WIFI", "DELETE SAVED WIFI", "CREDENTIALS?", []() {
+                case 9: // WIFI RESET
+                    UI.showConfirmModal(ua ? "СКИД WIFI" : "WIPE WIFI",
+                                        ua ? "ВИДАЛИТИ ПАРОЛІ" : "DELETE SAVED WIFI",
+                                        ua ? "МЕРЕЖІ З ПАМ'ЯТІ?" : "CREDENTIALS?", []() {
                         Settings.clearWifiCredentials();
                         Net.disconnectWifi();
-                        UI.showToast("WIFI WIPED", Settings.palette().danger);
+                        UI.showToast(Settings.get().language == 1 ? "WIFI ОЧИЩЕНО" : "WIFI WIPED", Settings.palette().danger);
                     });
                     break;
-                case 9: // HW INFO
+                case 10: // HW INFO
                     _infoBox = true;
                     break;
-                case 10: // FACTORY RESET
-                    UI.showConfirmModal("RESET", "RESTORE DEFAULT", "SETTINGS?", []() {
+                case 11: // FACTORY RESET
+                    UI.showConfirmModal(ua ? "СКИД" : "RESET",
+                                        ua ? "ВІДНОВИТИ ЗАВОДСЬКІ" : "RESTORE DEFAULT",
+                                        ua ? "НАЛАШТУВАННЯ?" : "SETTINGS?", []() {
                         Settings.resetToDefaults();
                         Display.setBrightness(Settings.get().brightness);
                         Anim.setTargetFps(Settings.get().targetFps);
-                        UI.showToast("DEFAULTS SET", Settings.palette().ok);
+                        UI.showToast(Settings.get().language == 1 ? "СКИД ВИКОНАНО" : "DEFAULTS SET", Settings.palette().ok);
                     });
                     break;
             }
@@ -1341,6 +1358,7 @@ public:
         const ColorPalette& pal = Settings.palette();
         Display.clearBody(pal.bg);
         int16_t by = DisplayManager::kBodyY + yOffset;
+        bool ua = (Settings.get().language == 1);
 
         if (_infoBox) {
             c.setTextColor(pal.primary);
@@ -1381,53 +1399,57 @@ public:
 
             switch (idx) {
                 case 0:
-                    label = "THEME";
+                    label = ua ? "ТЕМА" : "THEME";
                     std::strncpy(val, Settings.palette().name, 8);
                     val[8] = '\0';
                     break;
                 case 1:
-                    label = "BRIGHT";
+                    label = ua ? "ЯСКРАВ" : "BRIGHT";
                     snprintf(val, sizeof(val), "%u%%", (unsigned)(s.brightness * 100 / 255));
                     break;
                 case 2:
-                    label = "AUTO-DIM";
-                    if (s.sleepTimeoutSec == 0) std::strcpy(val, "OFF");
+                    label = ua ? "АВТО-СОН" : "AUTO-DIM";
+                    if (s.sleepTimeoutSec == 0) std::strcpy(val, ua ? "ВИМК" : "OFF");
                     else snprintf(val, sizeof(val), "%us", s.sleepTimeoutSec);
                     break;
                 case 3:
-                    label = "GLITCH FX";
-                    std::strcpy(val, (s.animIntensity == 0) ? "OFF" : (s.animIntensity == 1) ? "CLASSIC" : "MULTI");
+                    label = ua ? "МОВА" : "LANG";
+                    std::strcpy(val, ua ? "UA" : "EN");
                     break;
                 case 4:
-                    label = "UI SPEED";
-                    std::strcpy(val, (s.animSpeed == 0) ? "FAST" : (s.animSpeed == 1) ? "NORM" : "SLOW");
+                    label = ua ? "ГЛІТЧІ" : "GLITCH";
+                    std::strcpy(val, (s.animIntensity == 0) ? (ua ? "ВИМК" : "OFF") : (s.animIntensity == 1) ? "MIN" : "FULL");
                     break;
                 case 5:
-                    label = "FPS CAP";
-                    snprintf(val, sizeof(val), "%uHz", s.targetFps);
+                    label = ua ? "ШВИДКІСТЬ" : "UI SPEED";
+                    std::strcpy(val, (s.animSpeed == 0) ? (ua ? "ШВИД" : "FAST") : (s.animSpeed == 1) ? "NORM" : (ua ? "ПОВІЛ" : "SLOW"));
                     break;
                 case 6:
-                    label = "SOUND";
-                    std::strcpy(val, (PIN_BUZZER < 0) ? "NO HW" : (s.soundEnabled ? "ON" : "OFF"));
+                    label = ua ? "ЛІМІТ FPS" : "FPS CAP";
+                    snprintf(val, sizeof(val), "%uHz", s.targetFps);
                     break;
                 case 7:
-                    label = "WIFI AP";
-                    std::strcpy(val, Net.isConfigPortalActive() ? "ON" : "START");
+                    label = ua ? "ЗВУК" : "SOUND";
+                    std::strcpy(val, (PIN_BUZZER < 0) ? "NO HW" : (s.soundEnabled ? (ua ? "УВІМК" : "ON") : (ua ? "ВИМК" : "OFF")));
                     break;
                 case 8:
-                    label = "WIFI RST";
-                    std::strcpy(val, "WIPE");
+                    label = ua ? "ТОЧКА Д." : "WIFI AP";
+                    std::strcpy(val, Net.isConfigPortalActive() ? (ua ? "АКТИВ" : "ON") : (ua ? "СТАРТ" : "START"));
                     break;
                 case 9:
-                    label = "HW INFO";
-                    std::strcpy(val, "VIEW");
+                    label = ua ? "СКИД WIFI" : "WIFI RST";
+                    std::strcpy(val, ua ? "ОЧИСТ" : "WIPE");
                     break;
                 case 10:
-                    label = "DEFAULTS";
-                    std::strcpy(val, "RESET");
+                    label = ua ? "ЗАЛІЗО" : "HW INFO";
+                    std::strcpy(val, ua ? "ОГЛЯД" : "VIEW");
+                    break;
+                case 11:
+                    label = ua ? "СКИД НАЛ." : "DEFAULTS";
+                    std::strcpy(val, ua ? "СКИД" : "RESET");
                     break;
             }
-            UI.drawMenuRow(ry, label, val, idx == _selIdx, idx == 7 && Net.isConfigPortalActive());
+            UI.drawMenuRow(ry, label, val, idx == _selIdx, idx == 8 && Net.isConfigPortalActive());
         }
 
         Display.drawScrollbar(listTop, visRows * 24 - 4, kItemCount, visRows, _selIdx);

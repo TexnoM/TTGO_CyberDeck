@@ -10,3 +10,8 @@
 Thumbs.db
 *.swp
 *~
+
+# Private conversation logs (local only between user & assistant, NEVER push to Git/GitHub)
+CONVERSATION_LOG.md
+*conversation_log*
+*CONVERSATION*
