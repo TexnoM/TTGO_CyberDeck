@@ -88,7 +88,7 @@ void SettingsManager::applyDefaults() {
     std::strncpy(_settings.pingHost, "192.168.1.1", sizeof(_settings.pingHost) - 1);
     _settings.pingHost[sizeof(_settings.pingHost) - 1] = '\0';
     _settings.lastSavedEpoch  = 0; // 0 = unsynchronized (no fake hardcoded date!)
-    _settings.language        = 1; // 1 = UA by default, 0 = EN
+    _settings.language        = 0; // 0 = EN by default, 1 = UA
 }
 
 #include <LittleFS.h>

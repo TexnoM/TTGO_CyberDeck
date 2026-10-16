@@ -177,13 +177,6 @@ void UIManager::handleInput(ButtonEvent ev) {
         return;
     }
 
-    if (ev == ButtonEvent::B_LONG) {
-        _quickMenuOpen = true;
-        _quickMenuTween.start(24.0f, 0.0f, 150, EasingType::OUT_CUBIC);
-        invalidateAll();
-        return;
-    }
-
     if (_state == SystemState::LAUNCHER) {
         if (ev == ButtonEvent::A_SHORT) {
             _selectedApp = (_selectedApp + 1) % APP_COUNT;
@@ -641,26 +634,127 @@ void UIManager::renderCyberCat() {
     Display.markDirty(boxX, boxY, boxW, boxH);
 }
 
+struct SsSpaceStar {
+    float x;
+    float y;
+    float z;
+    float pz;
+};
+
+static constexpr size_t kSsStarCount = 48;
+static SsSpaceStar s_ssStars[kSsStarCount];
+static bool s_ssStarsInit = false;
+
+static void initSsStars() {
+    for (size_t i = 0; i < kSsStarCount; ++i) {
+        s_ssStars[i].x = ((int)(esp_random() % 240) - 120);
+        s_ssStars[i].y = ((int)(esp_random() % 360) - 180);
+        s_ssStars[i].z = (float)(20 + (esp_random() % 220));
+        s_ssStars[i].pz = s_ssStars[i].z;
+    }
+    s_ssStarsInit = true;
+}
+
 void UIManager::renderScreensaver() {
     auto& c = Display.canvas();
     const ColorPalette& pal = Settings.palette();
-    c.fillSprite(TFT_BLACK);
+    c.fillSprite(pal.bg);
 
-    char hms[16];
-    Net.getFormattedTime(hms, sizeof(hms), nullptr, 0);
+    if (!s_ssStarsInit) {
+        initSsStars();
+    }
 
-    // Pure Deep Sleep Clock: ONLY TIME AND NOTHING ELSE
+    uint32_t now = millis();
+    float dt = Anim.dt();
+    if (dt <= 0.001f || dt > 0.1f) dt = 0.016f;
+
+    int16_t vcx = DisplayManager::kWidth / 2;
+    int16_t vcy = DisplayManager::kHeight / 2;
+
+    // 1. 3D Space Hyperdrive Starfield
+    float starSpeed = 85.0f;
+    for (size_t i = 0; i < kSsStarCount; ++i) {
+        s_ssStars[i].pz = s_ssStars[i].z;
+        s_ssStars[i].z -= starSpeed * dt;
+
+        if (s_ssStars[i].z <= 4.0f) {
+            s_ssStars[i].x = ((int)(esp_random() % 240) - 120);
+            s_ssStars[i].y = ((int)(esp_random() % 360) - 180);
+            s_ssStars[i].z = 220.0f;
+            s_ssStars[i].pz = 220.0f;
+        }
+
+        float k = 100.0f / s_ssStars[i].z;
+        int16_t sx = vcx + (int16_t)(s_ssStars[i].x * k);
+        int16_t sy = vcy + (int16_t)(s_ssStars[i].y * k);
+
+        float pk = 100.0f / s_ssStars[i].pz;
+        int16_t psx = vcx + (int16_t)(s_ssStars[i].x * pk);
+        int16_t psy = vcy + (int16_t)(s_ssStars[i].y * pk);
+
+        if (sx < 0 || sx >= DisplayManager::kWidth || sy < 0 || sy >= DisplayManager::kHeight) {
+            s_ssStars[i].z = 220.0f;
+            continue;
+        }
+
+        uint16_t starCol = (s_ssStars[i].z < 60.0f) ? pal.highlight : ((s_ssStars[i].z < 130.0f) ? pal.secondary : pal.gridDim);
+        c.drawLine(psx, psy, sx, sy, starCol);
+        if (s_ssStars[i].z < 50.0f) {
+            c.drawPixel(sx + 1, sy, starCol);
+        }
+    }
+
+    // 2. Central Cockpit Frame
+    int16_t pw = DisplayManager::kWidth - 14;
+    int16_t ph = 96;
+    int16_t px = 7;
+    int16_t py = 72;
+
+    Display.drawCyberPanel(px, py, pw, ph, pal.panelBg, pal.secondary, pal.primary, 4);
+
+    char hms[16], dateStr[24];
+    Net.getFormattedTime(hms, sizeof(hms), dateStr, sizeof(dateStr));
+
+    // Time Display
     Display.setClockFont();
     int16_t tw = c.textWidth(hms);
-    int16_t tx = (DisplayManager::kWidth - tw) / 2;
-    int16_t ty = (DisplayManager::kHeight - 48) / 2;
-
+    int16_t tx = px + (pw - tw) / 2;
     c.setTextColor(pal.highlight);
-    c.setCursor(tx, ty);
+    c.setCursor(tx, py + 16);
     c.print(hms);
-
-    // Restore standard UI font
     Display.resetFont();
+
+    // Seconds bar
+    uint32_t ep = Net.currentEpoch();
+    uint32_t sec = ep % 60;
+    Display.drawProgressBar(px + 12, py + 48, pw - 24, 2, sec / 59.0f, pal.primary, pal.gridDim, pal.bg);
+
+    // Date & Space indicator
+    bool ua = (Settings.get().language == 1);
+    c.setTextColor(pal.textMain);
+    int16_t dw = c.textWidth(dateStr);
+    c.setCursor(px + (pw - dw) / 2, py + 58);
+    c.print(dateStr);
+
+    c.setTextColor(pal.secondary);
+    const char* subBadge = ua ? "КОСМОС -70%" : "SPACE WARP -70%";
+    int16_t sw = c.textWidth(subBadge);
+    c.setCursor(px + (pw - sw) / 2, py + 74);
+    c.print(subBadge);
+
+    // Top/Bottom status
+    c.setTextColor(pal.textDim);
+    c.setCursor(10, 14);
+    c.print(ua ? "КОСМІЧНИЙ ГОДИННИК" : "COSMIC CHRONO");
+
+    c.setTextColor(pal.gridDim);
+    c.setCursor(14, DisplayManager::kHeight - 16);
+    c.print(ua ? "НАТИСНІТЬ ДЛЯ ВИХОДУ" : "PRESS KEY TO WAKE");
+
+    if (_catActive) {
+        renderCyberCat();
+    }
+
     Display.markAllDirty();
 }
 
@@ -673,14 +767,15 @@ void UIManager::updateAndRender() {
 
     uint32_t now = millis();
 
-    // Check Idle timeout (20s default) -> dim brightness and show clean clock
+    // Check Idle timeout (20s default) -> dim 70% and show cosmic clock screensaver
     uint8_t toSec = Settings.get().sleepTimeoutSec;
     if (toSec > 0 && !_screensaverActive && _state != SystemState::BOOT_SEQUENCE) {
         if ((now - _lastActivityMs) >= toSec * 1000UL) {
             _screensaverActive = true;
             uint8_t base = Settings.get().brightness;
-            // Noticeable 50% sleep dimming (minimum floor 25)
-            uint8_t dimmed = (base > 50) ? (uint8_t)(base * 50 / 100) : 25;
+            // Noticeable 70% dimming during sleep (drops to 30% of original brightness)
+            uint8_t dimmed = (uint8_t)((base * 30) / 100);
+            if (dimmed < 20) dimmed = 20;
             Display.setBrightness(dimmed);
         }
     }

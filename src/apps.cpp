@@ -7,7 +7,7 @@
 #include <cstring>
 #include <mbedtls/sha256.h>
 
-static const AppMetadata kAppMeta[APP_COUNT] = {
+static const AppMetadata kAppMetaEN[APP_COUNT] = {
     { APP_SYSTEM,      "SYSTEM",      "DUAL-CORE & RAM HUD",   "MOD-01 // SYS" },
     { APP_WIFI_RADAR,  "WIFI RADAR",  "2.4GHZ AP INSPECTOR",   "MOD-02 // RAD" },
     { APP_PKT_SNIFFER, "PKT SNIFFER", "802.11 TRAFFIC & CH",   "MOD-03 // SNF" },
@@ -19,11 +19,27 @@ static const AppMetadata kAppMeta[APP_COUNT] = {
     { APP_MATRIX,      "MATRIX",      "DIGITAL RAIN STREAM",   "MOD-09 // MTX" },
     { APP_STARFIELD,   "STARFIELD",   "3D WARP VECTOR SIM",    "MOD-10 // STR" },
     { APP_CLOCK,       "CLOCK",       "CUSTOM & WIFI TIME",    "MOD-11 // CLK" },
-    { APP_SETTINGS,    "SETTINGS",    "NVS CONFIG & TUNING",   "MOD-12 // CFG" }
+    { APP_SETTINGS,    "SETTINGS",    "CONFIG & TUNING",       "MOD-12 // CFG" }
+};
+
+static const AppMetadata kAppMetaUA[APP_COUNT] = {
+    { APP_SYSTEM,      "СИСТЕМА",     "ПРОЦЕСОР ТА ПАМ'ЯТЬ",   "МОД-01 // СИС" },
+    { APP_WIFI_RADAR,  "WI-FI РАДАР", "АНАЛІЗАТОР 2.4 ГГЦ",    "МОД-02 // РАД" },
+    { APP_PKT_SNIFFER, "СНІФФЕР",     "ТРАФІК ПАКЕТІВ 802.11", "МОД-03 // СНФ" },
+    { APP_NET_TOOLS,   "МЕРЕЖА",      "ПІНГ ТА СОНАР ХОСТА",   "МОД-04 // МЕР" },
+    { APP_WEB_DECK,    "ВЕБ-ДЕК",     "ДИСТАНЦІЙНА КОНСОЛЬ",   "МОД-05 // ВЕБ" },
+    { APP_CYBER_EYE,   "КІБЕР-ОКО",   "ВИХОВАНЕЦЬ-БРЕЛОК",     "МОД-06 // ОКО" },
+    { APP_CUBE_3D,     "3D КУБ",      "КАРКАСНИЙ ТЕСЕРАКТ",    "МОД-07 // КУБ" },
+    { APP_TERMINAL,    "ТЕРМІНАЛ",    "ЛОКАЛЬНИЙ ШЕЛЛ",        "МОД-08 // ШЕЛ" },
+    { APP_MATRIX,      "МАТРИЦЯ",     "ПОТІК ЦИФРОВОГО ДОЩУ",  "МОД-09 // МТХ" },
+    { APP_STARFIELD,   "ЗОРІ 3D",     "КОСМІЧНИЙ ГІПЕРПРОСТІР", "МОД-10 // ЗОР" },
+    { APP_CLOCK,       "ГОДИННИК",    "ЧАС З ТЕЛЕФОНУ ТА NTP", "МОД-11 // ЧАС" },
+    { APP_SETTINGS,    "НАЛАШТУВ.",   "LITTLEFS ТА СИСТЕМА",   "МОД-12 // НАЛ" }
 };
 
 const AppMetadata& getAppMeta(uint8_t idx) {
-    return kAppMeta[idx % APP_COUNT];
+    bool ua = (Settings.get().language == 1);
+    return ua ? kAppMetaUA[idx % APP_COUNT] : kAppMetaEN[idx % APP_COUNT];
 }
 
 // ============================================================================
@@ -1235,35 +1251,24 @@ public:
 // 11. SETTINGS & HARDWARE CONFIGURATION APPLICATION (MINIMALIST)
 // ============================================================================
 class AppSettings : public CyberApp {
-    static constexpr uint8_t kItemCount = 12;
+    static constexpr uint8_t kItemCount = 7;
     uint8_t _selIdx  = 0;
-    bool    _infoBox = false;
     bool    _dirty   = true;
 public:
     void onEnter() override {
         _selIdx  = 0;
-        _infoBox = false;
         _dirty   = true;
     }
 
     const char* hintA() const override {
-        bool ua = (Settings.get().language == 1);
-        return _infoBox ? (ua ? "НАЗАД" : "BACK") : (ua ? "ДАЛІ" : "NEXT");
+        return (Settings.get().language == 1) ? "ДАЛІ" : "NEXT";
     }
     const char* hintB() const override {
-        bool ua = (Settings.get().language == 1);
-        return _infoBox ? (ua ? "ЗАКРИТИ" : "CLOSE") : (ua ? "ЗМІНИТИ" : "CHANGE");
+        return (Settings.get().language == 1) ? "ЗМІНИТИ" : "CHANGE";
     }
 
     void handleInput(ButtonEvent ev) override {
         _dirty = true;
-        if (_infoBox) {
-            if (ev == ButtonEvent::A_SHORT || ev == ButtonEvent::B_SHORT) {
-                _infoBox = false;
-            }
-            return;
-        }
-
         if (ev == ButtonEvent::A_SHORT) {
             _selIdx = (_selIdx + 1) % kItemCount;
         } else if (ev == ButtonEvent::B_SHORT) {
@@ -1281,7 +1286,7 @@ public:
                     Display.setBrightness(s.brightness);
                     Settings.markDirty();
                     break;
-                case 2: // AUTO-DIM / SCREENSAVER
+                case 2: // SLEEP TIMEOUT
                     if (s.sleepTimeoutSec == 20) s.sleepTimeoutSec = 30;
                     else if (s.sleepTimeoutSec == 30) s.sleepTimeoutSec = 60;
                     else if (s.sleepTimeoutSec == 60) s.sleepTimeoutSec = 0;
@@ -1295,27 +1300,7 @@ public:
                     UI.showToast(s.language == 1 ? "МОВА: UA" : "LANG: EN", Settings.palette().ok, 1200);
                     UI.invalidateAll();
                     break;
-                case 4: // GLITCH FX
-                    s.animIntensity = (s.animIntensity + 1) % 3;
-                    Settings.markDirty();
-                    break;
-                case 5: // UI SPEED
-                    s.animSpeed = (s.animSpeed + 1) % 3;
-                    Settings.markDirty();
-                    break;
-                case 6: // FPS CAP
-                    if (s.targetFps == 30) s.targetFps = 60;
-                    else if (s.targetFps == 60) s.targetFps = 90;
-                    else if (s.targetFps == 90) s.targetFps = 120;
-                    else s.targetFps = 30;
-                    Anim.setTargetFps(s.targetFps);
-                    Settings.markDirty();
-                    break;
-                case 7: // SOUND FX
-                    s.soundEnabled = !s.soundEnabled;
-                    Settings.markDirty();
-                    break;
-                case 8: // WIFI AP
+                case 4: // WIFI AP
                     if (Net.isConfigPortalActive()) {
                         Net.stopConfigPortal();
                         UI.showToast(ua ? "ТОЧКУ ВИМК" : "AP OFF", Settings.palette().warning);
@@ -1324,7 +1309,7 @@ public:
                         UI.showToast("AP: 192.168.4.1", Settings.palette().ok, 2000);
                     }
                     break;
-                case 9: // WIFI RESET
+                case 5: // WIFI WIPE
                     UI.showConfirmModal(ua ? "СКИД WIFI" : "WIPE WIFI",
                                         ua ? "ВИДАЛИТИ ПАРОЛІ" : "DELETE SAVED WIFI",
                                         ua ? "МЕРЕЖІ З ПАМ'ЯТІ?" : "CREDENTIALS?", []() {
@@ -1333,11 +1318,8 @@ public:
                         UI.showToast(Settings.get().language == 1 ? "WIFI ОЧИЩЕНО" : "WIFI WIPED", Settings.palette().danger);
                     });
                     break;
-                case 10: // HW INFO
-                    _infoBox = true;
-                    break;
-                case 11: // FACTORY RESET
-                    UI.showConfirmModal(ua ? "СКИД" : "RESET",
+                case 6: // FACTORY RESET
+                    UI.showConfirmModal(ua ? "СКИДАННЯ" : "RESET",
                                         ua ? "ВІДНОВИТИ ЗАВОДСЬКІ" : "RESTORE DEFAULT",
                                         ua ? "НАЛАШТУВАННЯ?" : "SETTINGS?", []() {
                         Settings.resetToDefaults();
@@ -1360,40 +1342,10 @@ public:
         int16_t by = DisplayManager::kBodyY + yOffset;
         bool ua = (Settings.get().language == 1);
 
-        if (_infoBox) {
-            c.setTextColor(pal.primary);
-            c.setCursor(10, by + 18);
-            c.print("TTGO_CyberDeck");
-
-            c.setTextColor(pal.textMain);
-            c.setCursor(10, by + 42); c.print("ST7789 135x240");
-            char b[28];
-            snprintf(b, sizeof(b), "MOSI:%d CLK:%d", PIN_TFT_MOSI, PIN_TFT_SCLK);
-            c.setCursor(10, by + 62); c.print(b);
-            snprintf(b, sizeof(b), "CS:%d DC:%d RST:%d", PIN_TFT_CS, PIN_TFT_DC, PIN_TFT_RST);
-            c.setCursor(10, by + 82); c.print(b);
-            snprintf(b, sizeof(b), "BTN A:%d B:%d", PIN_BTN_A, PIN_BTN_B);
-            c.setCursor(10, by + 102); c.print(b);
-
-            c.setTextColor(pal.secondary);
-            c.setCursor(10, by + 132); c.print(Net.portalSsid());
-            c.setTextColor(pal.textDim);
-            c.setCursor(10, by + 150); c.print("192.168.4.1");
-            return;
-        }
-
-        int16_t listTop = by + 8;
-        constexpr uint8_t visRows = 8;
-
-        uint8_t startIdx = 0;
-        if (_selIdx >= visRows) {
-            startIdx = _selIdx - (visRows - 1);
-        }
-
+        int16_t listTop = by + 12;
         const SystemSettings& s = Settings.get();
-        for (uint8_t r = 0; r < visRows && (startIdx + r) < kItemCount; ++r) {
-            uint8_t idx = startIdx + r;
-            int16_t ry  = listTop + r * 24;
+        for (uint8_t idx = 0; idx < kItemCount; ++idx) {
+            int16_t ry = listTop + idx * 26;
             const char* label = "";
             char val[16] = "";
 
@@ -1417,42 +1369,20 @@ public:
                     std::strcpy(val, ua ? "UA" : "EN");
                     break;
                 case 4:
-                    label = ua ? "ГЛІТЧІ" : "GLITCH";
-                    std::strcpy(val, (s.animIntensity == 0) ? (ua ? "ВИМК" : "OFF") : (s.animIntensity == 1) ? "MIN" : "FULL");
-                    break;
-                case 5:
-                    label = ua ? "ШВИДКІСТЬ" : "UI SPEED";
-                    std::strcpy(val, (s.animSpeed == 0) ? (ua ? "ШВИД" : "FAST") : (s.animSpeed == 1) ? "NORM" : (ua ? "ПОВІЛ" : "SLOW"));
-                    break;
-                case 6:
-                    label = ua ? "ЛІМІТ FPS" : "FPS CAP";
-                    snprintf(val, sizeof(val), "%uHz", s.targetFps);
-                    break;
-                case 7:
-                    label = ua ? "ЗВУК" : "SOUND";
-                    std::strcpy(val, (PIN_BUZZER < 0) ? "NO HW" : (s.soundEnabled ? (ua ? "УВІМК" : "ON") : (ua ? "ВИМК" : "OFF")));
-                    break;
-                case 8:
                     label = ua ? "ТОЧКА Д." : "WIFI AP";
                     std::strcpy(val, Net.isConfigPortalActive() ? (ua ? "АКТИВ" : "ON") : (ua ? "СТАРТ" : "START"));
                     break;
-                case 9:
-                    label = ua ? "СКИД WIFI" : "WIFI RST";
+                case 5:
+                    label = ua ? "СКИД WIFI" : "WIFI WIPE";
                     std::strcpy(val, ua ? "ОЧИСТ" : "WIPE");
                     break;
-                case 10:
-                    label = ua ? "ЗАЛІЗО" : "HW INFO";
-                    std::strcpy(val, ua ? "ОГЛЯД" : "VIEW");
-                    break;
-                case 11:
-                    label = ua ? "СКИД НАЛ." : "DEFAULTS";
+                case 6:
+                    label = ua ? "СКИДАННЯ" : "DEFAULTS";
                     std::strcpy(val, ua ? "СКИД" : "RESET");
                     break;
             }
-            UI.drawMenuRow(ry, label, val, idx == _selIdx, idx == 8 && Net.isConfigPortalActive());
+            UI.drawMenuRow(ry, label, val, idx == _selIdx, idx == 4 && Net.isConfigPortalActive());
         }
-
-        Display.drawScrollbar(listTop, visRows * 24 - 4, kItemCount, visRows, _selIdx);
     }
 };
 

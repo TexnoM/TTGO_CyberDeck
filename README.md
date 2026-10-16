@@ -13,18 +13,6 @@
 > [!NOTE]
 > **[Українська версія документації доступна у файлі README_UA.md](README_UA.md)**
 
-```
-================================================================================
-  _______ _______ _____  ____     _______     _               _____            _
- |__   __|__   __/ ____|/ __ \   / ____\ \   / /             |  __ \          | |
-    | |     | | | |  __| |  | | | |     \ \_/ /__ _ __ ______| |  | | ___  ___| | __
-    | |     | | | | |_ | |  | | | |      \   / _ \ '__|______| |  | |/ _ \/ __| |/ /
-    | |     | | | |__| | |__| | | |____   | |  __/ |         | |__| |  __/ (__|   < 
-    |_|     |_|  \_____|\____/   \_____|  |_|\___|_|         |_____/ \___|\___|_|\_\
-================================================================================
-               POCKET CYBERDECK FIRMWARE FOR LILYGO TTGO T-DISPLAY 1.14"
-```
-
 **TTGO_CyberDeck** is an embedded firmware engineered for Chinese clones and official revisions of the **LilyGO TTGO T-Display 1.14" ESP32** development board (ST7789 IPS 135x240, 2 tactile buttons, USB-C). Designed as a compact cyberpunk pocket console and functional keychain computer.
 
 ---
@@ -45,16 +33,16 @@
 
 ### Graphics Pipeline & Hardware PWM
 - **Zero-Flicker DMA Engine**: High-frequency SPI DMA transfers at `40 MHz` powered by LovyanGFX.
-- **Hardware LEDC Backlight Dimming**: Dedicated ESP32 LEDC PWM controller on `GPIO 4` operating at `2 kHz` for smooth, flicker-free brightness scaling without CPU overhead.
-- **Pure Minimalist Sleep Mode**:
+- **Hardware Backlight Dimming**: Dedicated ESP32 PWM controller on `GPIO 4` operating via hardware `analogWrite` for smooth, flicker-free brightness scaling.
+- **Cosmic Screensaver with Easter Egg**:
   - Triggers automatically after idle timeout (default: `20s`, configurable in Settings).
-  - Screen dims by 50% to prevent panel burn-in and save battery.
-  - Displays **only the digital clock** (`HH:MM:SS`) on a pure black background.
-  - Zero decorative clutter during sleep; touching any button immediately wakes the device.
+  - Screen dims by 70% to save battery and prevent panel burn-in.
+  - Features real-time 3D hyperdrive starfield travel with centered digital clock (`HH:MM:SS`), date, seconds progress bar, and an hourly cyber-cat easter egg.
+  - Touching any button immediately wakes the device with full brightness restored.
 
 ### Storage & Internationalization
 - **LittleFS Persistent Configuration**: All parameters (`theme`, `brightness`, `sleepTimeout`, `timezone`, `targetFps`, `language`) are stored in `/config.json` with fallback mirror to NVS.
-- **Full Bilingual Support (UA / EN)**: Native UTF-8 Cyrillic rendering via high-resolution bitmap fonts. Switchable on the fly from the Settings menu.
+- **Full Bilingual Support (EN default / UA)**: Native UTF-8 Cyrillic rendering via high-resolution bitmap fonts. Switchable on the fly from the Settings menu.
 - **4MB Flash Architecture**: Strictly engineered and budgeted for standard `4MB SPI Flash` modules (compatible with both 4MB and 16MB revisions).
 
 ### Integrated Cyberdeck Modules
@@ -62,14 +50,14 @@
 2. **`WIFI RADAR`** — 2.4 GHz spectrum analyzer with RSSI signal meter, channel allocation, and encryption inspection.
 3. **`PKT SNIFFER`** — Promiscuous 802.11 packet activity analyzer with 13-channel traffic distribution.
 4. **`NET TOOLS`** — Network interface status and ICMP/TCP ping sonar with live latency histogram.
-5. **`WEB DECK`** — Built-in HTTP console (`http://192.168.4.1`) for remote status inspection and Wi-Fi credential pairing.
+5. **`WEB DECK`** — Built-in HTTP console (`http://192.168.4.1`) for remote status inspection and TTGO Wi-Fi configuration.
 6. **`CYBER EYE`** — Interactive cybernetic pet with procedural blinking and emotion expressions.
 7. **`3D CUBE`** — Real-time 3D wireframe matrix projection with live FPS counter and frame timing.
 8. **`TERMINAL`** — Embedded shell interface with built-in commands (`help`, `sysinfo`, `wifi`, `ping`, `cat`).
 9. **`MATRIX`** — Digital glyph stream generator with adjustable density and speed.
 10. **`STARFIELD`** — 3D cosmic warp space travel simulator.
-11. **`CLOCK`** — Precision timekeeper supporting manual button adjustment, NTP Wi-Fi sync, and phone synchronization.
-12. **`SETTINGS`** — System configuration interface: theme selection, backlight control, sleep timeout, language toggle (UA/EN), and diagnostics.
+11. **`CLOCK`** — Precision timekeeper supporting manual button adjustment, NTP Wi-Fi sync, and TTGO synchronization.
+12. **`SETTINGS`** — Streamlined system configuration interface: theme selection, backlight control, sleep timeout, language toggle (EN/UA), Wi-Fi AP, and factory reset.
 
 ---
 

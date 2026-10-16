@@ -54,8 +54,8 @@ bool DisplayManager::begin() {
     _tft.setRotation(Settings.get().displayRotation);
     _tft.fillScreen(TFT_BLACK);
 
-    // Direct hardware LEDC PWM control (ESP32 Arduino core 3.x API)
-    ledcAttach(PIN_TFT_BL, TFT_BL_PWM_FREQ, TFT_BL_PWM_BITS);
+    // Direct hardware PWM via analogWrite (LEDC) for reliable brightness & sleep dimming
+    pinMode(PIN_TFT_BL, OUTPUT);
     setBrightness(Settings.get().brightness);
 
     _canvas.setColorDepth(16);
@@ -83,7 +83,8 @@ void DisplayManager::setClockFont() {
 }
 
 void DisplayManager::setBrightness(uint8_t brightness) {
-    ledcWrite(PIN_TFT_BL, brightness);
+    pinMode(PIN_TFT_BL, OUTPUT);
+    analogWrite(PIN_TFT_BL, brightness);
 }
 
 void DisplayManager::setRotation(uint8_t rotation) {
