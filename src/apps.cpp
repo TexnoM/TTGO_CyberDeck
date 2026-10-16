@@ -102,8 +102,14 @@ public:
                     Net.isConfigPortalActive() ? pal.secondary : pal.textDim);
         }
 
-        snprintf(buf, sizeof(buf), "%lu MB", (unsigned long)(ESP.getFlashChipSize() / (1024UL * 1024UL)));
-        drawRow(by + 174, "FLASH", buf, pal.textDim);
+        if (Net.hasValidBattery()) {
+            snprintf(buf, sizeof(buf), "%u%% %.2fV %s",
+                     Net.batteryPercent(), Net.batteryVoltage(),
+                     Net.isCharging() ? "CHRG" : "BAT");
+            drawRow(by + 174, "BATTERY", buf, Net.isCharging() ? pal.highlight : pal.ok);
+        } else {
+            drawRow(by + 174, "POWER", "USB 5V (NO BAT)", pal.secondary);
+        }
     }
 };
 
@@ -725,9 +731,9 @@ class AppTerminal : public CyberApp {
     uint8_t _cmdIdx    = 0;
     bool    _dirty     = true;
 
-    static constexpr uint8_t kCmdCount = 9;
+    static constexpr uint8_t kCmdCount = 10;
     const char* const _cmds[kCmdCount] = {
-        "help", "sysinfo", "wifi", "scan", "ping", "keygen", "uptime", "theme", "reboot"
+        "help", "sysinfo", "wifi", "scan", "ping", "keygen", "uptime", "theme", "cat", "reboot"
     };
 
     void appendLine(const char* text) {
@@ -753,7 +759,7 @@ class AppTerminal : public CyberApp {
         if (std::strcmp(cmd, "help") == 0) {
             appendLine("sysinfo wifi scan");
             appendLine("ping keygen uptime");
-            appendLine("theme reboot");
+            appendLine("theme cat reboot");
         } else if (std::strcmp(cmd, "sysinfo") == 0) {
             char b[22];
             snprintf(b, sizeof(b), "CPU:%luMHz %.0fFPS",
@@ -793,6 +799,9 @@ class AppTerminal : public CyberApp {
             Settings.get().themeId = (Settings.get().themeId + 1) % THEME_COUNT;
             Settings.markDirty();
             appendLine(Settings.palette().name);
+        } else if (std::strcmp(cmd, "cat") == 0) {
+            UI.triggerCyberCat();
+            appendLine("(=^･ω･^=) PURR!");
         } else if (std::strcmp(cmd, "reboot") == 0) {
             UI.showConfirmModal("SYSTEM REBOOT", "RESTART TTGO_CyberDeck", "FIRMWARE NOW?", []() {
                 ESP.restart();
@@ -1226,7 +1235,7 @@ public:
 // 11. SETTINGS & HARDWARE CONFIGURATION APPLICATION (MINIMALIST)
 // ============================================================================
 class AppSettings : public CyberApp {
-    static constexpr uint8_t kItemCount = 10;
+    static constexpr uint8_t kItemCount = 11;
     uint8_t _selIdx  = 0;
     bool    _infoBox = false;
     bool    _dirty   = true;
@@ -1265,15 +1274,23 @@ public:
                     Display.setBrightness(s.brightness);
                     Settings.markDirty();
                     break;
-                case 2: // GLITCH FX
+                case 2: // AUTO-DIM / SCREENSAVER
+                    if (s.sleepTimeoutSec == 20) s.sleepTimeoutSec = 30;
+                    else if (s.sleepTimeoutSec == 30) s.sleepTimeoutSec = 60;
+                    else if (s.sleepTimeoutSec == 60) s.sleepTimeoutSec = 0;
+                    else if (s.sleepTimeoutSec == 0) s.sleepTimeoutSec = 10;
+                    else s.sleepTimeoutSec = 20;
+                    Settings.markDirty();
+                    break;
+                case 3: // GLITCH FX
                     s.animIntensity = (s.animIntensity + 1) % 3;
                     Settings.markDirty();
                     break;
-                case 3: // UI SPEED
+                case 4: // UI SPEED
                     s.animSpeed = (s.animSpeed + 1) % 3;
                     Settings.markDirty();
                     break;
-                case 4: // FPS CAP
+                case 5: // FPS CAP
                     if (s.targetFps == 30) s.targetFps = 60;
                     else if (s.targetFps == 60) s.targetFps = 90;
                     else if (s.targetFps == 90) s.targetFps = 120;
@@ -1281,11 +1298,11 @@ public:
                     Anim.setTargetFps(s.targetFps);
                     Settings.markDirty();
                     break;
-                case 5: // SOUND FX
+                case 6: // SOUND FX
                     s.soundEnabled = !s.soundEnabled;
                     Settings.markDirty();
                     break;
-                case 6: // WIFI AP
+                case 7: // WIFI AP
                     if (Net.isConfigPortalActive()) {
                         Net.stopConfigPortal();
                         UI.showToast("AP OFF", Settings.palette().warning);
@@ -1294,17 +1311,17 @@ public:
                         UI.showToast("AP: 192.168.4.1", Settings.palette().ok, 2000);
                     }
                     break;
-                case 7: // WIFI RESET
+                case 8: // WIFI RESET
                     UI.showConfirmModal("WIPE WIFI", "DELETE SAVED WIFI", "CREDENTIALS?", []() {
                         Settings.clearWifiCredentials();
                         Net.disconnectWifi();
                         UI.showToast("WIFI WIPED", Settings.palette().danger);
                     });
                     break;
-                case 8: // HW INFO
+                case 9: // HW INFO
                     _infoBox = true;
                     break;
-                case 9: // FACTORY RESET
+                case 10: // FACTORY RESET
                     UI.showConfirmModal("RESET", "RESTORE DEFAULT", "SETTINGS?", []() {
                         Settings.resetToDefaults();
                         Display.setBrightness(Settings.get().brightness);
@@ -1373,39 +1390,44 @@ public:
                     snprintf(val, sizeof(val), "%u%%", (unsigned)(s.brightness * 100 / 255));
                     break;
                 case 2:
+                    label = "AUTO-DIM";
+                    if (s.sleepTimeoutSec == 0) std::strcpy(val, "OFF");
+                    else snprintf(val, sizeof(val), "%us", s.sleepTimeoutSec);
+                    break;
+                case 3:
                     label = "GLITCH FX";
                     std::strcpy(val, (s.animIntensity == 0) ? "OFF" : (s.animIntensity == 1) ? "CLASSIC" : "MULTI");
                     break;
-                case 3:
+                case 4:
                     label = "UI SPEED";
                     std::strcpy(val, (s.animSpeed == 0) ? "FAST" : (s.animSpeed == 1) ? "NORM" : "SLOW");
                     break;
-                case 4:
+                case 5:
                     label = "FPS CAP";
                     snprintf(val, sizeof(val), "%uHz", s.targetFps);
                     break;
-                case 5:
+                case 6:
                     label = "SOUND";
                     std::strcpy(val, (PIN_BUZZER < 0) ? "NO HW" : (s.soundEnabled ? "ON" : "OFF"));
                     break;
-                case 6:
+                case 7:
                     label = "WIFI AP";
                     std::strcpy(val, Net.isConfigPortalActive() ? "ON" : "START");
                     break;
-                case 7:
+                case 8:
                     label = "WIFI RST";
                     std::strcpy(val, "WIPE");
                     break;
-                case 8:
+                case 9:
                     label = "HW INFO";
                     std::strcpy(val, "VIEW");
                     break;
-                case 9:
+                case 10:
                     label = "DEFAULTS";
                     std::strcpy(val, "RESET");
                     break;
             }
-            UI.drawMenuRow(ry, label, val, idx == _selIdx, idx == 6 && Net.isConfigPortalActive());
+            UI.drawMenuRow(ry, label, val, idx == _selIdx, idx == 7 && Net.isConfigPortalActive());
         }
 
         Display.drawScrollbar(listTop, visRows * 24 - 4, kItemCount, visRows, _selIdx);

@@ -103,6 +103,8 @@ public:
     bool hasValidBattery() const { return _batteryValid; }
     float batteryVoltage() const { return _batteryVolts; }
     uint8_t batteryPercent() const { return _batteryPct; }
+    bool isCharging() const { return _isCharging; }
+    bool isUsbPowered() const { return _isUsbPowered; }
 
 private:
     WebServer _server{80};
@@ -141,6 +143,8 @@ private:
 
     // Battery monitoring state
     bool     _batteryValid       = false;
+    bool     _isCharging         = false;
+    bool     _isUsbPowered       = true;
     float    _batteryVolts       = 0.0f;
     uint8_t  _batteryPct         = 0;
     uint32_t _lastBatteryReadMs  = 0;

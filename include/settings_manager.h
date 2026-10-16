@@ -39,6 +39,7 @@ struct SystemSettings {
     uint8_t  matrixDensity;    // 1..5
     uint8_t  starfieldSpeed;   // 1..5
     int8_t   timezoneHours;    // UTC offset in hours (-12..+14)
+    uint8_t  sleepTimeoutSec;  // 0 = OFF, 10, 20 (default), 30, 60
     char     pingHost[48];     // Configurable host/IP for Network Tools ping test
     uint32_t lastSavedEpoch;   // Last valid epoch timestamp
 };

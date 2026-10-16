@@ -52,6 +52,8 @@ public:
     // Modal Dialog
     void showConfirmModal(const char* title, const char* line1, const char* line2, ModalCallback onConfirm);
     bool isModalActive() const { return _modalActive; }
+    bool isScreensaverActive() const { return _screensaverActive; }
+    void triggerCyberCat();
 
     // Request redraw of body on next frame
     void invalidateBody()   { _bodyNeedsRedraw = true; }
@@ -92,6 +94,15 @@ private:
     uint16_t    _toastCol          = 0;
     uint32_t    _toastEndMs        = 0;
 
+    // Screensaver & Idle dimming state
+    uint32_t    _lastActivityMs    = 0;
+    bool        _screensaverActive = false;
+
+    // Hourly Easter Egg (Cyber Cat)
+    uint32_t    _lastCatPurrMs     = 0;
+    bool        _catActive         = false;
+    uint32_t    _catEndMs          = 0;
+
     // Dirty tracking flags
     bool        _headerNeedsRedraw = true;
     bool        _bodyNeedsRedraw   = true;
@@ -104,6 +115,8 @@ private:
     void renderQuickMenu();
     void renderModal();
     void renderToast();
+    void renderScreensaver();
+    void renderCyberCat();
 
     void handleQuickMenuInput(ButtonEvent ev);
 };

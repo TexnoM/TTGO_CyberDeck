@@ -84,6 +84,7 @@ void SettingsManager::applyDefaults() {
     _settings.matrixDensity   = 3;
     _settings.starfieldSpeed  = 3;
     _settings.timezoneHours   = 3; // UTC+3 default
+    _settings.sleepTimeoutSec = 20; // 20 seconds idle timeout by default
     std::strncpy(_settings.pingHost, "192.168.1.1", sizeof(_settings.pingHost) - 1);
     _settings.pingHost[sizeof(_settings.pingHost) - 1] = '\0';
     _settings.lastSavedEpoch  = 0; // 0 = unsynchronized (no fake hardcoded date!)
@@ -161,6 +162,7 @@ bool SettingsManager::loadFromLittleFS() {
     if (extractJsonInt(json, "mtxDen", intVal)) _settings.matrixDensity = (uint8_t)constrain(intVal, 1, 5);
     if (extractJsonInt(json, "strSpd", intVal)) _settings.starfieldSpeed = (uint8_t)constrain(intVal, 1, 5);
     if (extractJsonInt(json, "tzHrs", intVal)) _settings.timezoneHours = (int8_t)constrain(intVal, -12, 14);
+    if (extractJsonInt(json, "sleepTo", intVal)) _settings.sleepTimeoutSec = (uint8_t)constrain(intVal, 0, 120);
 
     char hostBuf[48];
     if (extractJsonString(json, "pingHost", hostBuf, sizeof(hostBuf))) {
@@ -193,6 +195,7 @@ bool SettingsManager::saveToLittleFS() {
     json += "  \"mtxDen\": " + String(_settings.matrixDensity) + ",\n";
     json += "  \"strSpd\": " + String(_settings.starfieldSpeed) + ",\n";
     json += "  \"tzHrs\": " + String(_settings.timezoneHours) + ",\n";
+    json += "  \"sleepTo\": " + String(_settings.sleepTimeoutSec) + ",\n";
     json += "  \"pingHost\": \"" + String(_settings.pingHost) + "\",\n";
     json += "  \"epoch\": " + String(_settings.lastSavedEpoch) + "\n";
     json += "}\n";

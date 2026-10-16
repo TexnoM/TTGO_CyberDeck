@@ -793,8 +793,12 @@ void WifiManager::updateBatteryReading() {
         _batteryVolts = (_batteryVolts == 0.0f) ? vBat : (_batteryVolts * 0.7f + vBat * 0.3f);
         float pct = (_batteryVolts - 3.30f) / (4.18f - 3.30f) * 100.0f;
         _batteryPct = (uint8_t)constrain((int)pct, 0, 100);
+        _isCharging   = (_batteryVolts >= 4.10f && _batteryVolts <= 4.35f);
+        _isUsbPowered = (_batteryVolts >= 4.15f);
     } else {
         _batteryValid = false;
+        _isCharging   = false;
+        _isUsbPowered = true;
     }
 #endif
 }

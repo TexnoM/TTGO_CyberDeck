@@ -10,11 +10,13 @@ UIManager UI;
 static constexpr uint8_t kQuickMenuCount = 6;
 
 void UIManager::begin() {
-    _state         = SystemState::BOOT_SEQUENCE;
-    _bootStartMs   = millis();
-    _selectedApp   = 0;
-    _nextGlitchMs  = millis() + 1800;
-    _glitchPattern = 0;
+    _state           = SystemState::BOOT_SEQUENCE;
+    _bootStartMs     = millis();
+    _selectedApp     = 0;
+    _nextGlitchMs    = millis() + 1800;
+    _glitchPattern   = 0;
+    _lastActivityMs  = millis();
+    _lastCatPurrMs   = millis();
     invalidateAll();
 }
 
@@ -132,6 +134,16 @@ void UIManager::handleQuickMenuInput(ButtonEvent ev) {
 void UIManager::handleInput(ButtonEvent ev) {
     if (ev == ButtonEvent::NONE) return;
 
+    _lastActivityMs = millis();
+
+    // Wake up from screensaver without executing triggering button action
+    if (_screensaverActive) {
+        _screensaverActive = false;
+        Display.setBrightness(Settings.get().brightness);
+        invalidateAll();
+        return;
+    }
+
     if (_state == SystemState::BOOT_SEQUENCE) {
         _state = SystemState::LAUNCHER;
         _transitionTween.start(28.0f, 0.0f, 180, EasingType::OUT_CUBIC);
@@ -211,6 +223,34 @@ void UIManager::drawHeader(const char* title) {
     c.print(title);
 
     int16_t rightCursor = DisplayManager::kWidth - 5;
+
+    // Draw Battery Icon & Charge/Percentage indicator
+    rightCursor -= 16;
+    int16_t bx = rightCursor;
+    int16_t by = 6;
+
+    c.drawRect(bx, by, 14, 7, pal.gridDim);
+    c.drawFastVLine(bx + 14, by + 2, 3, pal.gridDim);
+
+    if (Net.hasValidBattery()) {
+        uint8_t pct = Net.batteryPercent();
+        int16_t fillW = (pct * 12) / 100;
+        uint16_t bCol = Net.isCharging() ? pal.highlight : (pct < 20 ? pal.danger : pal.ok);
+        if (fillW > 0) {
+            c.fillRect(bx + 1, by + 1, fillW, 5, bCol);
+        }
+        if (Net.isCharging()) {
+            c.drawPixel(bx + 6, by + 2, pal.warning);
+            c.drawPixel(bx + 7, by + 3, pal.warning);
+            c.drawPixel(bx + 6, by + 4, pal.warning);
+        }
+    } else {
+        // USB Powered symbol
+        c.setTextColor(pal.secondary, pal.bg);
+        c.setCursor(bx + 2, by);
+        c.print("U");
+    }
+    rightCursor -= 4;
 
     if (Net.isConfigPortalActive()) {
         rightCursor -= 14;
@@ -552,6 +592,108 @@ void UIManager::renderToast() {
     Display.markDirty(tx, ty, tw, 20);
 }
 
+void UIManager::triggerCyberCat() {
+    _catActive = true;
+    _catEndMs  = millis() + 4500;
+    invalidateBody();
+}
+
+void UIManager::renderCyberCat() {
+    auto& c = Display.canvas();
+    const ColorPalette& pal = Settings.palette();
+
+    uint32_t now = millis();
+    if (now >= _catEndMs) {
+        _catActive = false;
+        invalidateBody();
+        return;
+    }
+
+    int16_t boxW = DisplayManager::kWidth - 10;
+    int16_t boxH = 46;
+    int16_t boxX = 5;
+    int16_t boxY = DisplayManager::kHeight - DisplayManager::kFooterH - boxH - 4;
+
+    Display.drawCyberPanel(boxX, boxY, boxW, boxH, pal.panelBg, pal.secondary, pal.highlight, 4);
+
+    bool blink = ((now / 400) % 6 == 0);
+    const char* catFace = blink ? " ( -.- ) " : " ( o.o ) ";
+
+    c.setTextColor(pal.primary);
+    c.setCursor(boxX + 6, boxY + 8);
+    c.print("  /\\_/\\  ");
+
+    c.setTextColor(pal.highlight);
+    c.setCursor(boxX + 6, boxY + 20);
+    c.print(catFace);
+
+    c.setTextColor(pal.primary);
+    c.setCursor(boxX + 6, boxY + 32);
+    c.print("  > ^ <  ");
+
+    c.setTextColor(pal.secondary);
+    c.setCursor(boxX + 64, boxY + 12);
+    c.print("MEOW! //");
+    c.setTextColor(pal.ok);
+    c.setCursor(boxX + 64, boxY + 26);
+    c.print("CAT PURR");
+
+    Display.markDirty(boxX, boxY, boxW, boxH);
+}
+
+void UIManager::renderScreensaver() {
+    auto& c = Display.canvas();
+    const ColorPalette& pal = Settings.palette();
+    c.fillSprite(pal.bg);
+
+    uint32_t now = millis();
+    float t = now * 0.001f;
+
+    // Organic floating displacement (lissajous bounce)
+    int16_t cx = (DisplayManager::kWidth / 2) + (int16_t)(std::sin(t * 0.45f) * 14.0f);
+    int16_t cy = 90 + (int16_t)(std::cos(t * 0.35f) * 40.0f);
+
+    char hms[16], dateStr[24];
+    Net.getFormattedTime(hms, sizeof(hms), dateStr, sizeof(dateStr));
+
+    // Floating subtle background matrix sparkles
+    for (int i = 0; i < 8; ++i) {
+        int16_t sx = (int16_t)((i * 22 + (uint32_t)(now * 0.02f * (i + 1))) % DisplayManager::kWidth);
+        int16_t sy = (int16_t)((i * 35 + (uint32_t)(now * 0.035f * (i + 1))) % DisplayManager::kHeight);
+        c.drawPixel(sx, sy, pal.gridDim);
+    }
+
+    // Large floating digital cyber clock
+    c.setTextSize(2);
+    int16_t tw = std::strlen(hms) * 12;
+    int16_t tx = max<int16_t>(4, cx - tw / 2);
+    c.setTextColor(pal.primary);
+    c.setCursor(tx, cy);
+    c.print(hms);
+    c.setTextSize(1);
+
+    // Date & Idle Badge below floating clock
+    c.setTextColor(pal.textDim);
+    int16_t dw = std::strlen(dateStr) * 6;
+    c.setCursor(max<int16_t>(4, cx - dw / 2), cy + 22);
+    c.print(dateStr);
+
+    c.setTextColor(pal.secondary);
+    c.setCursor((DisplayManager::kWidth - 80) / 2, cy + 38);
+    c.print("[ECO DIM -30%]");
+
+    // Bottom subtle hint
+    c.setTextColor(pal.gridDim);
+    c.setCursor(14, DisplayManager::kHeight - 16);
+    c.print("PRESS KEY TO WAKE");
+
+    if (_catActive) {
+        renderCyberCat();
+    }
+
+    Display.markAllDirty();
+}
+
 void UIManager::updateAndRender() {
     if (_state == SystemState::BOOT_SEQUENCE) {
         renderBootSequence();
@@ -560,6 +702,30 @@ void UIManager::updateAndRender() {
     }
 
     uint32_t now = millis();
+
+    // Check Idle timeout (20s default) -> dim 30% and show animated time screensaver
+    uint8_t toSec = Settings.get().sleepTimeoutSec;
+    if (toSec > 0 && !_screensaverActive && _state != SystemState::BOOT_SEQUENCE) {
+        if ((now - _lastActivityMs) >= toSec * 1000UL) {
+            _screensaverActive = true;
+            uint8_t dimmed = (uint8_t)(Settings.get().brightness * 0.70f);
+            Display.setBrightness(dimmed);
+        }
+    }
+
+    // Hourly cyber cat easter egg check (every 3600 seconds)
+    if (_lastCatPurrMs == 0) {
+        _lastCatPurrMs = now;
+    } else if ((now - _lastCatPurrMs) >= 3600000UL) {
+        _lastCatPurrMs = now;
+        triggerCyberCat();
+    }
+
+    if (_screensaverActive) {
+        renderScreensaver();
+        Display.flush();
+        return;
+    }
 
     uint32_t hdrInterval = Settings.get().showFpsOverlay ? 250 : 1000;
     if ((now - _lastHeaderTickMs) >= hdrInterval) {
@@ -654,6 +820,9 @@ void UIManager::updateAndRender() {
     }
     if (_toastActive) {
         renderToast();
+    }
+    if (_catActive) {
+        renderCyberCat();
     }
 
     Display.flush();

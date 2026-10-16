@@ -6,6 +6,18 @@
 
 ---
 
+## 📸 Keychain & Hardware Gallery
+
+<p align="center">
+  <img src="docs/images/keychain_front.png" alt="TTGO CyberDeck Keychain Front View" width="280" />
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="docs/images/keychain_side.png" alt="TTGO CyberDeck Keychain In Action" width="280" />
+</p>
+
+> 💡 **Place your photos here:** Save your keychain/case build pictures into [`docs/images/`](docs/images/) as `keychain_front.png` and `keychain_side.png` to display them here automatically.
+
+---
+
 ## Key Highlights
 
 - **Soft Multi-Glitch & Zero-Flicker DMA Engine**:

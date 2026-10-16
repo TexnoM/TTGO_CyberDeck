@@ -6,6 +6,18 @@
 
 ---
 
+## 📸 Галерея брелока (Hardware & Keychain Gallery)
+
+<p align="center">
+  <img src="docs/images/keychain_front.png" alt="TTGO CyberDeck Keychain Front View" width="280" />
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="docs/images/keychain_side.png" alt="TTGO CyberDeck Keychain In Action" width="280" />
+</p>
+
+> 💡 **Місце для ваших фотографій:** Помістіть знімки вашого брелока/корпусу в папку [`docs/images/`](docs/images/) під назвами `keychain_front.png` та `keychain_side.png`, і вони автоматично відобразяться тут.
+
+---
+
 ## Основні можливості
 
 - **Рендеринг через SPI DMA без мерехтіння (Zero-Flicker Engine)**:
